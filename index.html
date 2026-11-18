@@ -148,6 +148,10 @@ a.btn{text-decoration:none;display:inline-block}
 }
 @media(min-width:600px) and (max-width:899px) and (pointer:fine){#nav{width:188px;flex-basis:188px}#nav button{font-size:13.5px;padding:9px 10px}}
   #p-users label{max-width:100%}#p-users input{max-width:100%;width:100%;box-sizing:border-box}#p-users label span{max-width:100%}
+  .hoyTop{display:grid;grid-template-columns:340px minmax(0,1fr);gap:14px;align-items:start;margin-bottom:14px}.hoyTop>.card{margin-bottom:0}.dpanel{max-width:none}
+  .dtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:8px}.dtile{background:#fbfaf6;border:1px solid var(--bd);border-top:3px solid var(--gold);border-radius:10px;padding:8px 10px}.dtile b{display:block;font:600 21px Georgia,serif;color:var(--g)}.dtile span{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.4px}
+  @media(max-width:560px){.dtiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:899px){.hoyTop{grid-template-columns:1fr}.hoyTop>.card:first-child{max-width:none!important;order:2}.dpanel{order:1}}
   .cmpT th,.cmpT td{padding:6px 3px!important;white-space:normal!important}
   #p-rec th,#p-rec td{padding:6px 5px;font-size:13px;white-space:normal;vertical-align:middle}
   #p-rec td:first-child{min-width:105px;word-break:break-word}
