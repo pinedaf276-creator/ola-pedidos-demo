@@ -103,6 +103,18 @@
       if (ref === 'BULTO' && emb >= 12 && /SIN LAVAR/.test(norm(nm))) ref = 'BULTO';
       ord[k].lines.push({ name: nm, cx: cx, qty: d.qty, emb: emb, unit: unitOf(d.unit || d.word || ''), word: d.word, ref: ref, pres: presOf(d.name + ' ' + (d.ara || '')), price: d.price || 0, prov: d.prov || '', sinCx: !cx, est: !!d.est, cap: d.cap || 0, obs: d.chain + ' ' + d.oc + (d.est ? ' (cajas calculadas)' : '') });
     });
+    // si el mismo producto viene en varias órdenes de la ciudad, va en un solo renglón (la observación dice de cuáles órdenes)
+    keys.forEach(function (k) {
+      if (!merge) return;
+      var m = {}, out = [];
+      ord[k].lines.forEach(function (l) {
+        var key = [l.name, l.unit, l.ref, l.pres, Math.round((l.emb || 0) * 1000), l.price].join('|'), g = m[key];
+        if (!g) { g = m[key] = Object.assign({}, l, { _o: [] }); g.cx = 0; g.qty = 0; out.push(g); }
+        g.cx += l.cx || 0; g.qty += l.qty || 0; g.sinCx = g.sinCx && l.sinCx; g.est = g.est || l.est; g._o.push({ o: l.obs, cx: l.cx || 0 });
+      });
+      out.forEach(function (g) { if (g._o.length > 1) g.obs = g._o.map(function (p) { return p.o + (p.cx ? ' (' + p.cx + ' CX)' : ''); }).join(' + '); delete g._o; });
+      ord[k].lines = out;
+    });
     keys.forEach(function (k) { if (merge) ord[k].lines.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; }); });
     return keys.map(function (k) { return ord[k]; }).sort(function (a, b) { return a.city < b.city ? -1 : a.city > b.city ? 1 : (a.chain < b.chain ? -1 : 1); });
   }

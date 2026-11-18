@@ -415,8 +415,19 @@
     return a.join(' · ');
   }
   function az(rows) { return rows.slice().sort(function (x, y) { return String(x.name).localeCompare(String(y.name), 'es', { sensitivity: 'base', numeric: true }); }); }
+  // un solo renglón por producto: si el mismo producto viene en dos órdenes de la misma ciudad se suma (y se guarda de cuáles órdenes viene)
+  function mergeRows(rows) {
+    var m = {}, out = [];
+    rows.forEach(function (d) {
+      var k = [d.chain, L.norm(d.name), d.word || '', d.emb || 0].join('|'), g = m[k];
+      if (!g) { g = m[k] = Object.assign({}, d, { qty: 0, cx: 0, kg: 0, parts: [] }); out.push(g); }
+      g.qty += d.qty || 0; g.cx += d.cx || 0; g.kg += d.kg || 0; g.parts.push(d);
+    });
+    return out;
+  }
   function waLink(t) { return 'https://wa.me/?text=' + encodeURIComponent(t); }
   function waCity(c, rows) {
+    rows = mergeRows(az(rows));
     var t = '*Pedido ' + c + '* · ' + modeLbl() + dayTxt() + '\n' + rows.length + ' productos\n';
     az(rows).forEach(function (d) { t += '• ' + d.name + ': ' + qtyTxt(d) + (d.chain ? ' (' + d.chain + ')' : '') + '\n'; });
     return t;
@@ -427,7 +438,7 @@
     var t = '*Pedido: ' + label + '* · ' + modeLbl() + dayTxt() + '\n';
     cs.forEach(function (c) {
       t += '\n*' + c + '*\n';
-      az(rows.filter(function (d) { return d.city === c; })).forEach(function (d) { t += '• ' + d.name + ': ' + qtyTxt(d) + (d.chain ? ' (' + d.chain + ')' : '') + '\n'; });
+      mergeRows(az(rows.filter(function (d) { return d.city === c; }))).forEach(function (d) { t += '• ' + d.name + ': ' + qtyTxt(d) + (d.chain ? ' (' + d.chain + ')' : '') + '\n'; });
     });
     var cr = consRows(rows), kg = 0; cr.forEach(function (p) { kg += p.kg || 0; });
     t += '\n*TOTAL*\n';
@@ -448,10 +459,18 @@
     var w = d.word || 'unid.';
     return (d.cx && d.emb ? fmt(d.cx) + ' ' + cxWord(d.name) + ' × ' + fmt(d.emb) + ' = ' : '') + fmt(d.qty) + ' ' + w;
   }
-  function pickCount(c) { var n = 0, tot = 0; histDetail().filter(function (d) { return hdate(d) === S.hoyDate && d.city === c && (S.mode !== 'bodega' || d.chain === S.bChain); }).forEach(function (d, i) { tot++; if (S.hist.picked[pkKey(c, d, i)]) n++; }); return n + ' / ' + tot + ' alistados'; }
+  function pkKeys(c, g) { return g.parts.map(function (d) { return pkKey(c, d); }); }
+  function pickCount(c) {
+    var g = mergeRows(az(histDetail().filter(function (d) { return hdate(d) === S.hoyDate && d.city === c && (S.mode !== 'bodega' || d.chain === S.bChain); }))), n = 0;
+    g.forEach(function (x) { if (pkKeys(c, x).every(function (k) { return S.hist.picked[k]; })) n++; });
+    return n + ' / ' + g.length + ' alistados';
+  }
   function checkList(c, rows) {
     return '<div style="margin:0 0 8px;border-top:1px solid var(--bd);padding-top:6px"><div class="muted" data-cnt="' + esc(c) + '" style="margin-bottom:4px">' + pickCount(c) + '</div>' +
-      az(rows).map(function (d, i) { var k = pkKey(c, d, i); return '<label style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);font-size:15px"><input type="checkbox" style="width:22px;height:22px" data-pk="' + esc(k) + '" data-c="' + esc(c) + '"' + (S.hist.picked[k] ? ' checked' : '') + '><span style="flex:1">' + esc(d.name) + (d.pres && d.pres !== '–' ? '<br><small class="muted">' + esc(d.pres) + '</small>' : '') + '</span>' + (typeof S.hist.picked[k] === 'string' ? '<small class="muted" style="font-size:10.5px">✔ ' + esc(S.hist.picked[k]) + '</small>' : '') + '<b style="text-align:right">' + esc(qtyTxt(d)) + (d.kg && d.chain !== 'Éxito' ? '<br><small class="muted">≈ ' + wk(d.kg) + '</small>' : '') + '</b></label>'; }).join('') + '</div>';
+      mergeRows(az(rows)).map(function (d) {
+        var ks = pkKeys(c, d), on = ks.every(function (k) { return S.hist.picked[k]; }), by = S.hist.picked[ks[0]];
+        return '<label style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);font-size:15px"><input type="checkbox" style="width:22px;height:22px" data-pks="' + esc(ks.join('\u00a6')) + '" data-c="' + esc(c) + '"' + (on ? ' checked' : '') + '><span style="flex:1">' + esc(d.name) + (d.pres && d.pres !== '–' ? '<br><small class="muted">' + esc(d.pres) + '</small>' : '') + (d.parts.length > 1 ? '<br><small class="muted">' + d.parts.map(function (p) { return 'OC ' + esc(p.oc) + ': ' + esc(qtyTxt(p)); }).join(' · ') + '</small>' : '') + '</span>' + (on && typeof by === 'string' ? '<small class="muted" style="font-size:10.5px">✔ ' + esc(by) + '</small>' : '') + '<b style="text-align:right">' + esc(qtyTxt(d)) + (d.kg && d.chain !== 'Éxito' ? '<br><small class="muted">≈ ' + wk(d.kg) + '</small>' : '') + '</b></label>';
+      }).join('') + '</div>';
   }
   // ---- consolidado del día: un producto por fila, una columna por ciudad
   function consRows(rows) {
@@ -968,7 +987,7 @@
     var ctg = $('#calTg'); if (ctg) ctg.onclick = function () { S.calOpen = S.calOpen === false; renderHoy(); };
     el.querySelectorAll('[data-ch]').forEach(function (b) { b.onclick = function () { S.bChain = b.dataset.ch; S.openList = ''; renderHoy(); }; });
     el.querySelectorAll('[data-ls]').forEach(function (b) { b.onclick = function () { S.openList = S.openList === b.dataset.ls ? '' : b.dataset.ls; renderHoy(); }; });
-    el.querySelectorAll('[data-pk]').forEach(function (b) { b.onchange = function () { if (b.checked) S.hist.picked[b.dataset.pk] = (S.user && S.user.name) || 1; else delete S.hist.picked[b.dataset.pk]; saveHist(); var n = el.querySelector('[data-cnt="' + b.dataset.c + '"]'); if (n) n.textContent = pickCount(b.dataset.c); }; });
+    el.querySelectorAll('[data-pks]').forEach(function (b) { b.onchange = function () { b.dataset.pks.split('\u00a6').forEach(function (k) { if (b.checked) S.hist.picked[k] = (S.user && S.user.name) || 1; else delete S.hist.picked[k]; }); saveHist(); var n = el.querySelector('[data-cnt="' + b.dataset.c + '"]'); if (n) n.textContent = pickCount(b.dataset.c); }; });
     el.querySelectorAll('[data-hv]').forEach(function (b) { b.onclick = function () { S.hView = b.dataset.hv; if (S.hView === 'dest' && S.hoyDate === '*') S.hoyDate = ''; S.openList = ''; renderHoy(); }; });
     var cw = $('#cWa'); if (cw) { cw.href = waLink(consWa(base)); $('#cDl').onclick = function () { dlCons(baseAll.filter(function (d) { return d.chain === S.bChain; }), 'Consolidado ' + S.bChain + ' ' + (S.hoyDate === '*' ? 'todos los dias' : S.hoyDate) + '.xlsx'); }; }
     el.querySelectorAll('[data-ck]').forEach(function (b) { b.onchange = function () { if (b.checked) S.hist.picked[b.dataset.ck] = (S.user && S.user.name) || 1; else delete S.hist.picked[b.dataset.ck]; saveHist(); var tr = b.closest('tr'); tr.style.opacity = b.checked ? '.45' : ''; var n = el.querySelectorAll('[data-ck]'), d = 0; n.forEach(function (x) { if (x.checked) d++; }); $('#consCnt').textContent = d + ' / ' + n.length + ' productos sacados'; }; });
