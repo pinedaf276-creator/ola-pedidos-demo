@@ -154,6 +154,28 @@ a.btn{text-decoration:none;display:inline-block}
   #p-rec th,#p-rec td{padding:6px 5px;font-size:13px;white-space:normal;vertical-align:middle}
   #p-rec td:first-child{min-width:105px;word-break:break-word}
   #p-rec th.n{font-size:11px}
+
+/* tarjetas de ciudad: avance, grupos y filas compactas */
+.ccards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;align-items:start}
+.ccard.open{grid-column:1/-1}
+.cprog{margin:2px 0 10px}.cprog-t{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:5px;flex-wrap:wrap}
+.cbar{height:7px;border-radius:5px;background:#eadfd9;overflow:hidden}.cbar i{display:block;height:100%;background:#2e9e5b;border-radius:5px;transition:width .25s}
+.ckl{border-top:1px solid var(--bd);padding-top:10px;margin:0 0 10px}
+.cktool{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px}
+.cktool .seg button{padding:7px 14px;font-size:13px}.cktool input{flex:1 1 160px;min-width:0;font-size:15px;padding:8px 10px;box-sizing:border-box}
+.ckcols{column-width:340px;column-gap:28px}
+details.grp{break-inside:avoid;margin:0 0 6px}
+details.grp>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;background:#f4ece6;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:.02em;position:sticky;top:0;z-index:1}
+details.grp>summary::-webkit-details-marker{display:none}
+details.grp>summary::before{content:"▾";margin-right:6px;color:var(--mu)}details.grp:not([open])>summary::before{content:"▸"}
+details.grp>summary .gn{flex:1}.gs{font-weight:500;font-size:12px}
+details.grp.alldone>summary{opacity:.6}
+label.ck{display:flex;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--bd);font-size:14.5px;cursor:pointer}
+label.ck input{width:22px;height:22px;flex:none}
+label.ck .nm{flex:1;min-width:0;line-height:1.25}label.ck .nm small{display:block;font-size:11.5px;font-weight:400}
+label.ck .q{text-align:right;white-space:nowrap;font-size:14.5px}label.ck .q small{display:block;font-size:11px;font-weight:400}
+label.ck.done .nm,label.ck.done .q{opacity:.45;text-decoration:line-through}
+.ckl.pend label.ck.done,.ckl.pend details.grp.alldone{display:none}
 </style>
 </head>
 <body>

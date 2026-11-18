@@ -316,6 +316,6 @@
     rows.forEach(function (d) { var c = d.cx || 0; cx += c; qty += d.qty || 0; est += c / (d.cap || capOf(d.ref || refCx(d.ara || d.name))); });
     return { cx: cx, est: est, qty: qty, lines: rows.length };
   }
-  root.OlaXlsx = { build: build, refCx: refCx, groupOrders: groupOrders, lookup: lookup, capOf: capOf, stats: stats };
+  root.OlaXlsx = { groupOf: groupOf, GROUPS: GROUPS, build: build, refCx: refCx, groupOrders: groupOrders, lookup: lookup, capOf: capOf, stats: stats };
   if (typeof module !== 'undefined') module.exports = root.OlaXlsx;
 })(typeof window !== 'undefined' ? window : globalThis);

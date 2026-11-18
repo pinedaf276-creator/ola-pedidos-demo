@@ -460,17 +460,49 @@
     return (d.cx && d.emb ? fmt(d.cx) + ' ' + cxWord(d.name) + ' × ' + fmt(d.emb) + ' = ' : '') + fmt(d.qty) + ' ' + w;
   }
   function pkKeys(c, g) { return g.parts.map(function (d) { return pkKey(c, d); }); }
-  function pickCount(c) {
-    var g = mergeRows(az(histDetail().filter(function (d) { return hdate(d) === S.hoyDate && d.city === c && (S.mode !== 'bodega' || d.chain === S.bChain); }))), n = 0;
+  // avance de una ciudad: cuántos productos (ya unidos) están alistados
+  function pickInfo(c, rows) {
+    var g = mergeRows(rows), n = 0;
     g.forEach(function (x) { if (pkKeys(c, x).every(function (k) { return S.hist.picked[k]; })) n++; });
-    return n + ' / ' + g.length + ' alistados';
+    return { n: n, t: g.length };
+  }
+  function progHtml(c, rows) {
+    var p = pickInfo(c, rows), kg = 0; rows.forEach(function (d) { kg += d.kg || 0; });
+    return '<div class="cprog" data-prog="' + esc(c) + '"><div class="cprog-t"><span><b>' + p.t + '</b> producto' + (p.t === 1 ? '' : 's') + (kg ? ' · ' + wk(kg) : '') + '</span><span data-cnt="' + esc(c) + '">' + p.n + ' / ' + p.t + ' alistados</span></div><div class="cbar"><i style="width:' + (p.t ? Math.round(100 * p.n / p.t) : 0) + '%"></i></div></div>';
   }
   function checkList(c, rows) {
-    return '<div style="margin:0 0 8px;border-top:1px solid var(--bd);padding-top:6px"><div class="muted" data-cnt="' + esc(c) + '" style="margin-bottom:4px">' + pickCount(c) + '</div>' +
-      mergeRows(az(rows)).map(function (d) {
-        var ks = pkKeys(c, d), on = ks.every(function (k) { return S.hist.picked[k]; }), by = S.hist.picked[ks[0]];
-        return '<label style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);font-size:15px"><input type="checkbox" style="width:22px;height:22px" data-pks="' + esc(ks.join('\u00a6')) + '" data-c="' + esc(c) + '"' + (on ? ' checked' : '') + '><span style="flex:1">' + esc(d.name) + (d.pres && d.pres !== '–' ? '<br><small class="muted">' + esc(d.pres) + '</small>' : '') + (d.parts.length > 1 ? '<br><small class="muted">' + d.parts.map(function (p) { return 'OC ' + esc(p.oc) + ': ' + esc(qtyTxt(p)); }).join(' · ') + '</small>' : '') + '</span>' + (on && typeof by === 'string' ? '<small class="muted" style="font-size:10.5px">✔ ' + esc(by) + '</small>' : '') + '<b style="text-align:right">' + esc(qtyTxt(d)) + (d.kg && d.chain !== 'Éxito' ? '<br><small class="muted">≈ ' + wk(d.kg) + '</small>' : '') + '</b></label>';
-      }).join('') + '</div>';
+    var g = mergeRows(rows), GR = (O.GROUPS || []).concat(['OTROS']), by = {}, order = [];
+    g.forEach(function (d) { var k = O.groupOf ? O.groupOf(d.name) : 'PRODUCTOS'; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(d); });
+    order.sort(function (a, b) { var x = GR.indexOf(a), y = GR.indexOf(b); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y); });
+    var nice = { 'HORTALIZAS Y VERDURAS': 'Hortalizas y verduras' };
+    var doneG = function (k) { return by[k].every(function (d) { return pkKeys(c, d).every(function (x) { return S.hist.picked[x]; }); }); };
+    order.sort(function (a, b) { return (doneG(a) ? 1 : 0) - (doneG(b) ? 1 : 0); });   // grupos ya alistados al final
+    var h = '<div class="ckl' + (S.pendOnly ? ' pend' : '') + '" data-ckl="' + esc(c) + '"><div class="cktool"><div class="seg" style="margin:0"><button data-pf="all"' + (S.pendOnly ? '' : ' class="on"') + '>Todos</button><button data-pf="pend"' + (S.pendOnly ? ' class="on"' : '') + '>Pendientes</button></div><input type="search" data-lq="' + esc(c) + '" placeholder="🔍 Filtrar en ' + esc(c) + '"></div><div class="ckcols">';
+    order.forEach(function (k) {
+      var items = by[k].map(function (d) { var ks = pkKeys(c, d); return { d: d, ks: ks, on: ks.every(function (x) { return S.hist.picked[x]; }) }; });
+      items.sort(function (a, b) { return (a.on ? 1 : 0) - (b.on ? 1 : 0); });   // los pendientes primero al abrir
+      var done = items.filter(function (x) { return x.on; }).length, kg = 0; items.forEach(function (x) { kg += x.d.kg || 0; });
+      h += '<details class="grp' + (done === items.length ? ' alldone' : '') + '"' + (done === items.length ? '' : ' open') + '><summary><span class="gn">' + esc(nice[k] || (k.charAt(0) + k.slice(1).toLowerCase())) + '</span><span class="gs muted">' + (kg ? wk(kg) + ' · ' : '') + '<span data-gc>' + done + '/' + items.length + '</span></span></summary>';
+      items.forEach(function (x) {
+        var d = x.d, qt = qtyTxt(d), sub = [];
+        if (d.parts.length > 1) sub.push(d.parts.map(function (p) { return 'OC ' + esc(p.oc) + ': ' + esc(qtyTxt(p)); }).join(' · '));
+        var who = S.hist.picked[x.ks[0]], kgTxt = d.kg && d.chain !== 'Éxito' && !/\bkg\b|\bt$/.test(qt) ? '<small class="muted">≈ ' + wk(d.kg) + '</small>' : '';
+        h += '<label class="ck' + (x.on ? ' done' : '') + '" data-nm="' + esc(L.norm(d.name)) + '"><input type="checkbox" data-pks="' + esc(x.ks.join('¦')) + '" data-c="' + esc(c) + '"' + (x.on ? ' checked' : '') + '><span class="nm">' + esc(d.name) + (sub.length ? '<small class="muted">' + sub.join(' · ') + '</small>' : '') + (x.on && typeof who === 'string' ? '<small class="muted">✔ ' + esc(who) + '</small>' : '') + '</span><b class="q">' + esc(qt) + kgTxt + '</b></label>';
+      });
+      h += '</details>';
+    });
+    return h + '</div><p class="muted ckno" style="display:none;margin:8px 0">Nada coincide.</p></div>';
+  }
+  // actualiza barra, contadores y grupos desde las casillas (sin volver a dibujar: la lista no salta)
+  function updList(c) {
+    var card = document.querySelector('[data-card="' + c + '"]'); if (!card) return;
+    var all = card.querySelectorAll('[data-pks]'), n = 0; all.forEach(function (i) { if (i.checked) n++; });
+    var t = card.querySelector('[data-cnt]'); if (t) t.textContent = n + ' / ' + all.length + ' alistados';
+    var bar = card.querySelector('.cbar i'); if (bar) bar.style.width = (all.length ? Math.round(100 * n / all.length) : 0) + '%';
+    card.querySelectorAll('details.grp').forEach(function (g) {
+      var a = g.querySelectorAll('[data-pks]'), k = 0; a.forEach(function (i) { if (i.checked) k++; });
+      var gc = g.querySelector('[data-gc]'); if (gc) gc.textContent = k + '/' + a.length; g.classList.toggle('alldone', k === a.length);
+    });
   }
   // ---- consolidado del día: un producto por fila, una columna por ciudad
   function consRows(rows) {
@@ -961,15 +993,17 @@
       h += '<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><a class="btn sec" id="cWa" target="_blank" rel="noopener">💬 WhatsApp del consolidado</a><button class="btn" id="cDl">Descargar consolidado (Excel)</button><button class="btn sec" id="hAll">Descargar todo el día (una hoja por ciudad)</button></div>' + consHtml(base, cities);
       cities = [];
     }
-    h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px">';
+    h += '<div class="ccards">';
     cities.forEach(function (c) {
       var rows = base.filter(function (d) { return d.city === c; }), st = O.stats(rows), key = (S.dateMode === 'ped' ? 'P' : '') + S.hoyDate + '|' + c + (bod ? '|' + S.bChain : ''), sv = S.hist.status[key] || 'nuevo', kg = 0, ch = {};
       rows.forEach(function (d) { kg += d.kg; (ch[d.chain] = ch[d.chain] || {})[d.oc] = 1; });
       var col = CITY_COL[L.norm(c).replace(/ /g, '')] || '#BFBFBF';
-      h += '<div class="card" style="margin:0;padding:12px 14px;border-top:6px solid ' + col + '"><div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">' + esc(c) + '</h3><button class="btn sec sm" data-st="' + esc(key) + '">' + STAT_T[sv] + '</button></div>' +
+      var isOpen = S.openList === c || q;
+      h += '<div class="card ccard' + (isOpen ? ' open' : '') + '" data-card="' + esc(c) + '" style="margin:0;padding:12px 14px;border-top:6px solid ' + col + '"><div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">' + esc(c) + '</h3><button class="btn sec sm" data-st="' + esc(key) + '">' + STAT_T[sv] + '</button></div>' +
         '<div style="margin:6px 0;line-height:1.5">' + Object.keys(ch).map(function (k) { return '<span class="cb ' + esc(k) + '">' + esc(k) + '</span> <span class="muted" style="font-size:12px">' + Object.keys(ch[k]).map(function (o) { return srcLink(k, o, c); }).join(' · ') + '</span>'; }).join('<br>') + '</div>' +
-        '<div class="row" style="gap:8px;margin:0 0 8px;flex-wrap:wrap"><a class="btn sec sm" target="_blank" rel="noopener" href="' + waLink(waCity(c, (qs.length ? base : baseAll).filter(function (d) { return d.city === c; }))) + '">💬 WhatsApp</a><button class="btn sec sm" data-ls="' + esc(c) + '">☑ Lista</button></div>' +
-        ((S.openList === c || q) ? checkList(c, rows) : '') +
+        progHtml(c, rows) +
+        '<div class="row" style="gap:8px;margin:0 0 8px;flex-wrap:wrap"><button class="btn' + (isOpen ? '' : ' sec') + ' sm" data-ls="' + esc(c) + '">' + (isOpen ? '▴ Cerrar lista' : '☑ Abrir lista') + '</button><a class="btn sec sm" target="_blank" rel="noopener" href="' + waLink(waCity(c, (qs.length ? base : baseAll).filter(function (d) { return d.city === c; }))) + '">💬 WhatsApp</a></div>' +
+        (isOpen ? checkList(c, rows) : '') +
         '<div class="row" style="justify-content:space-between;align-items:center;gap:8px"><button class="btn sm" data-dl="' + esc(c) + '">Descargar Excel</button>' + (kg ? '<span class="muted" style="font-size:12px;white-space:nowrap">' + wk(kg) + '</span>' : '') + '</div></div>';
     });
     h += '</div>';
@@ -987,7 +1021,9 @@
     var ctg = $('#calTg'); if (ctg) ctg.onclick = function () { S.calOpen = S.calOpen === false; renderHoy(); };
     el.querySelectorAll('[data-ch]').forEach(function (b) { b.onclick = function () { S.bChain = b.dataset.ch; S.openList = ''; renderHoy(); }; });
     el.querySelectorAll('[data-ls]').forEach(function (b) { b.onclick = function () { S.openList = S.openList === b.dataset.ls ? '' : b.dataset.ls; renderHoy(); }; });
-    el.querySelectorAll('[data-pks]').forEach(function (b) { b.onchange = function () { b.dataset.pks.split('\u00a6').forEach(function (k) { if (b.checked) S.hist.picked[k] = (S.user && S.user.name) || 1; else delete S.hist.picked[k]; }); saveHist(); var n = el.querySelector('[data-cnt="' + b.dataset.c + '"]'); if (n) n.textContent = pickCount(b.dataset.c); }; });
+    el.querySelectorAll('[data-pks]').forEach(function (b) { b.onchange = function () { b.dataset.pks.split('\u00a6').forEach(function (k) { if (b.checked) S.hist.picked[k] = (S.user && S.user.name) || 1; else delete S.hist.picked[k]; }); saveHist(); var lb = b.closest('label'); if (lb) lb.classList.toggle('done', b.checked); updList(b.dataset.c); }; });
+    el.querySelectorAll('[data-pf]').forEach(function (b) { b.onclick = function () { S.pendOnly = b.dataset.pf === 'pend'; var box = b.closest('.ckl'); box.classList.toggle('pend', S.pendOnly); b.parentNode.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
+    el.querySelectorAll('[data-lq]').forEach(function (inp) { inp.oninput = function () { var w = L.norm(inp.value).trim(), box = inp.closest('.ckl'), any = 0; box.querySelectorAll('label.ck').forEach(function (l) { var ok = !w || l.dataset.nm.indexOf(w) >= 0; l.style.display = ok ? '' : 'none'; if (ok) any++; }); box.querySelectorAll('details.grp').forEach(function (g) { var vis = [].some.call(g.querySelectorAll('label.ck'), function (l) { return l.style.display !== 'none'; }); g.style.display = vis ? '' : 'none'; if (w && vis) g.open = true; }); box.querySelector('.ckno').style.display = any ? 'none' : ''; }; });
     el.querySelectorAll('[data-hv]').forEach(function (b) { b.onclick = function () { S.hView = b.dataset.hv; if (S.hView === 'dest' && S.hoyDate === '*') S.hoyDate = ''; S.openList = ''; renderHoy(); }; });
     var cw = $('#cWa'); if (cw) { cw.href = waLink(consWa(base)); $('#cDl').onclick = function () { dlCons(baseAll.filter(function (d) { return d.chain === S.bChain; }), 'Consolidado ' + S.bChain + ' ' + (S.hoyDate === '*' ? 'todos los dias' : S.hoyDate) + '.xlsx'); }; }
     el.querySelectorAll('[data-ck]').forEach(function (b) { b.onchange = function () { if (b.checked) S.hist.picked[b.dataset.ck] = (S.user && S.user.name) || 1; else delete S.hist.picked[b.dataset.ck]; saveHist(); var tr = b.closest('tr'); tr.style.opacity = b.checked ? '.45' : ''; var n = el.querySelectorAll('[data-ck]'), d = 0; n.forEach(function (x) { if (x.checked) d++; }); $('#consCnt').textContent = d + ' / ' + n.length + ' productos sacados'; }; });
