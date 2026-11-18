@@ -906,33 +906,11 @@
   }
 
 
-  // ---- panel del día (al lado del calendario): resumen, avance de despacho, productos principales y otros días
-  function dayPanel(rows, dates) {
-    var ped = S.dateMode === 'ped', all = S.hoyDate === '*', ords = {}, cities = {}, prods = {}, kg = 0, ch = {};
-    rows.forEach(function (d) { var ok = d.chain + '|' + d.oc; ords[ok] = d.chain; cities[d.city] = 1; kg += d.kg || 0; var p = prods[d.name] = prods[d.name] || { n: d.name, kg: 0, q: 0 }; p.kg += d.kg || 0; p.q += d.qty || 0; });
-    Object.keys(ords).forEach(function (k) { var c = ords[k]; ch[c] = ch[c] || { n: 0, d: 0 }; ch[c].n++; if (S.hist.disp && S.hist.disp[k]) ch[c].d++; });
-    var nO = Object.keys(ords).length, nD = Object.keys(ords).filter(function (k) { return S.hist.disp && S.hist.disp[k]; }).length;
-    var lbl = all ? 'Todos los días' : (function () { var m = /(\d{2})\.(\d{2})\.(\d{4})/.exec(S.hoyDate || ''); if (!m) return S.hoyDate || ''; var t = new Date(+m[3], +m[2] - 1, +m[1]).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }); return t.charAt(0).toUpperCase() + t.slice(1); })();
-    var asc = dates.slice().sort(function (a, b) { return dkey(a) - dkey(b); }), ix = asc.indexOf(S.hoyDate);
-    var tile = function (v, l) { return '<div class="dtile"><b>' + v + '</b><span>' + l + '</span></div>'; };
-    var h = '<div class="card dpanel"><div class="row" style="justify-content:space-between;gap:8px;margin-bottom:8px"><div class="seg" style="margin:0"><button data-dm="ent"' + (ped ? '' : ' class="on"') + '>Fecha de entrega</button><button data-dm="ped"' + (ped ? ' class="on"' : '') + '>Fecha de pedido</button></div></div>' +
-      '<div class="row" style="justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px"><button class="btn sec sm" data-dnav="-1"' + (ix <= 0 ? ' disabled' : '') + ' aria-label="Día anterior">‹</button><h2 style="margin:0;text-align:center;flex:1;font-size:17px">' + esc(lbl) + '</h2><button class="btn sec sm" data-dnav="1"' + (ix < 0 || ix >= asc.length - 1 ? ' disabled' : '') + ' aria-label="Día siguiente">›</button></div>' +
-      (ped ? '<p class="muted" style="margin:0 0 8px;font-size:12px">Se agrupa por el día en que se hizo el pedido. Las órdenes sin fecha de pedido salen en su día de entrega.</p>' : '') +
-      '<div class="dtiles">' + tile(nO, 'Órdenes') + tile(Object.keys(cities).length, 'Destinos') + tile(rows.length, 'Productos') + tile(kg ? '≈ ' + wk(kg) : '–', 'Peso') + '</div>';
-    if (nO) h += '<div style="margin:10px 0 4px"><div class="row" style="justify-content:space-between;font-size:13px"><span><b>Despacho</b> · ' + nD + ' de ' + nO + ' órdenes despachadas</span>' + Object.keys(ch).sort().map(function (c) { return '<span><span class="cb ' + esc(c) + '">' + esc(c) + '</span> ' + ch[c].d + '/' + ch[c].n + '</span>'; }).join('') + '</div><div style="height:7px;background:#eee7da;border-radius:99px;margin-top:5px;overflow:hidden"><div style="height:100%;width:' + Math.round(nD / nO * 100) + '%;background:#2f9a52"></div></div></div>';
-    var top = Object.keys(prods).map(function (k) { return prods[k]; }).sort(function (a, b) { return (b.kg - a.kg) || (b.q - a.q); }).slice(0, 5), mx = top.length ? (top[0].kg || top[0].q || 1) : 1;
-    if (top.length) h += '<div style="margin:10px 0 4px;font-size:13px"><b>Productos con más peso</b>' + top.map(function (p) { var v = p.kg || p.q; return '<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><span style="flex:0 0 46%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(p.n) + '">' + esc(p.n) + '</span><span style="flex:1;height:8px;background:#f1ebde;border-radius:99px;overflow:hidden"><span style="display:block;height:100%;width:' + Math.max(4, Math.round(v / mx * 100)) + '%;background:#b82a2b"></span></span><span style="flex:0 0 auto;font-weight:700;font-variant-numeric:tabular-nums">' + (p.kg ? wk(p.kg) : fmt(p.q)) + '</span></div>'; }).join('') + '</div>';
-    var n = new Date(), tk = +(n.getFullYear() + p2(n.getMonth() + 1) + p2(n.getDate())), nxt = asc.filter(function (d) { return dkey(d) >= tk && d !== S.hoyDate; }).slice(0, 4);
-    if (nxt.length) h += '<div style="margin:10px 0 4px;font-size:13px"><b>Otros días</b> <span class="muted">(toca para verlo)</span><div class="row" style="gap:6px;margin-top:5px;flex-wrap:wrap">' + nxt.map(function (d) { return '<button class="btn sec sm" data-day="' + d + '">' + dm(d) + '</button>'; }).join('') + '</div></div>';
-    h += '<div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"><a class="btn sec" id="hWa" target="_blank" rel="noopener">💬 Resumen del día</a> <button class="btn" id="hAll">Descargar todo el día</button></div></div>';
-    return h;
-  }
   function renderHoy() {
     var el = $('#p-hoy'), all = histDetail();
     if (!all.length) { el.innerHTML = syncBanner() + '<div class="card"><h2>Todavía no hay pedidos</h2><p class="muted">Cuando llegue un pedido a la carpeta de Drive aparece aquí solo.</p></div>'; var s0 = $('#syncNow'); if (s0) s0.onclick = function () { driveSync(true); }; return; }
     var dates = uniq(all.map(hdate)).sort(function (a, b) { return dkey(b) - dkey(a); });
     var consV = S.hView === 'cons';
-    if (S.calOpen === undefined) S.calOpen = !(window.matchMedia && window.matchMedia('(max-width:899px)').matches);
     if (!S.hoyDate || (dates.indexOf(S.hoyDate) < 0 && !(consV && S.hoyDate === '*'))) S.hoyDate = defaultDay(dates);
     var base = all.filter(function (d) { return S.hoyDate === '*' || hdate(d) === S.hoyDate; });
     var chainsDay = uniq(base.map(function (d) { return d.chain; })).sort(), cc = {}, bod = S.mode === 'bodega';
@@ -947,20 +925,21 @@
     base.forEach(function (d) { nOrd[d.chain + d.oc + d.city] = 1; });
     var cnt = histOrders().length, h = syncBanner();
     if (S.prevCnt != null && cnt > S.prevCnt && S.sync.state !== 'run') h += '<div class="banner ok">🆕 Llegaron <b>' + (cnt - S.prevCnt) + '</b> orden(es) nueva(s) desde la última vez que abriste la app.</div>';
-    h += '<div class="hoyTop">' + calHtml(!bod && !consV && S.oChain ? all.filter(function (d) { return d.chain === S.oChain; }) : all, consV) + dayPanel(baseAll, dates) + '</div>';
-    h += '<div class="card" style="padding:10px 14px"><input id="hq" type="search" value="' + esc(S.hq || '') + '" placeholder="🔍 Buscar producto, orden o ciudad… (varios: tomate, papa)" style="width:100%;font-size:17px;padding:10px;box-sizing:border-box"></div>';
-    h += '<div class="row" style="gap:10px;margin:0 0 12px"><button class="btn' + (consV ? ' sec' : '') + '" style="flex:1" data-hv="dest">📍 Por destino</button><button class="btn' + (consV ? '' : ' sec') + '" style="flex:1" data-hv="cons">📊 Consolidado del día</button></div>';
+    var ped = S.dateMode === 'ped';
+    h += '<div class="hoyTop">' + calHtml(!bod && !consV && S.oChain ? all.filter(function (d) { return d.chain === S.oChain; }) : all, consV) +
+      '<div class="card" style="padding:12px 14px"><div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:' + (ped ? '4' : '10') + 'px"><span class="muted" style="font-size:12px">Calendario por</span><div class="seg" style="margin:0"><button data-dm="ent"' + (ped ? '' : ' class="on"') + '>Fecha de entrega</button><button data-dm="ped"' + (ped ? ' class="on"' : '') + '>Fecha de pedido</button></div></div>' +
+      (ped ? '<p class="muted" style="margin:0 0 10px;font-size:12px">Por el día en que se hizo el pedido. Si una orden no trae esa fecha, sale en su día de entrega.</p>' : '') +
+      '<input id="hq" type="search" value="' + esc(S.hq || '') + '" placeholder="🔍 Buscar producto, orden o ciudad… (varios: tomate, papa)" style="width:100%;font-size:17px;padding:10px;box-sizing:border-box;margin-bottom:10px">' +
+      '<div class="row" style="gap:10px"><button class="btn' + (consV ? ' sec' : '') + '" style="flex:1" data-hv="dest">📍 Por destino</button><button class="btn' + (consV ? '' : ' sec') + '" style="flex:1" data-hv="cons">📊 Consolidado del día</button></div></div></div>';
     if (!bod && !consV && chainsDay.length > 1) h += '<div class="row" style="gap:8px;margin:0 0 12px;align-items:center;flex-wrap:wrap"><span class="muted">Ver:</span>' + [['', 'Todos']].concat(chainsDay.map(function (c) { return [c, (c === 'Ara' ? '🔴 ' : '🟡 ') + c + ' (' + cc[c] + ')']; })).map(function (p) { return '<button class="btn' + ((S.oChain || '') === p[0] ? '' : ' sec') + ' sm" data-oc="' + esc(p[0]) + '">' + p[1] + '</button>'; }).join('') + '</div>';
     if (bod || consV) h += '<div class="row" style="gap:10px;margin:0 0 12px">' + chainsDay.map(function (c) { var on = c === S.bChain; return '<button class="btn' + (on ? '' : ' sec') + '" style="flex:1;font-size:18px;padding:14px" data-ch="' + esc(c) + '">' + (c === 'Ara' ? '🔴 ' : '🟡 ') + esc(c) + ' <small>(' + cc[c] + ' prod.)</small></button>'; }).join('') + '</div>';
-    var bad = histOrders().filter(function (o) { return o.unread > 0 || o.totalOk === false || (o.poDate && o.date && dkey(o.date) < dkey(o.poDate)); });
-    if (bad.length) h += '<div class="banner" style="background:#fff3cd;border-color:#e0a800">⚠️ <b>' + bad.length + ' orden(es) por revisar</b> (total distinto al del PDF, líneas sin leer o fecha de entrega anterior al pedido): ' + '<ul style="margin:6px 0 0;padding-left:18px">' + bad.map(function (o) { return '<li>' + esc(o.chain + ' ' + o.oc + ' ' + o.city + (o.poDate && o.date && dkey(o.date) < dkey(o.poDate) ? ' (entrega ' + o.date + ')' : '')) + ' — ' + ordLinks(o) + '</li>'; }).join('') + '</ul></div>';
     var unk = histOrders().filter(function (o) { return o.chain === 'Ara' && o.totalOk == null && o.declared != null; }).length;
     if (q && !base.length) h += '<div class="card"><p class="muted">Nada coincide con “' + esc(S.hq) + '” en este día.</p></div>';
     h += '<p class="muted" style="margin:0 0 10px">' + (q ? 'Resultado de la búsqueda: ' : '') + cities.length + ' destinos · ' + Object.keys(nOrd).length + ' órdenes · ' + base.length + ' productos</p>';
     var waQt = qs.length && base.length ? waSearch(base, (S.hq || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean).join(', ')) : '';
     if (waQt) h += '<div class="card" style="padding:12px 14px"><div class="row" style="justify-content:space-between;gap:8px"><b>💬 Mensaje para WhatsApp</b><span class="muted" style="font-size:12px">por ciudad y al final el total</span></div><textarea id="waQ" readonly rows="9" style="width:100%;box-sizing:border-box;margin:8px 0;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace">' + esc(waQt) + '</textarea><div class="row" style="gap:8px"><a class="btn" id="waQb" target="_blank" rel="noopener" href="' + waLink(waQt) + '">💬 Enviar por WhatsApp</a><button class="btn sec" id="waQc">📋 Copiar mensaje</button></div></div>';
     if (consV) {
-      h += '<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><a class="btn sec" id="cWa" target="_blank" rel="noopener">💬 WhatsApp del consolidado</a><button class="btn" id="cDl">Descargar consolidado (Excel)</button></div>' + consHtml(base, cities);
+      h += '<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><a class="btn sec" id="cWa" target="_blank" rel="noopener">💬 WhatsApp del consolidado</a><button class="btn" id="cDl">Descargar consolidado (Excel)</button><button class="btn sec" id="hAll">Descargar todo el día (una hoja por ciudad)</button></div>' + consHtml(base, cities);
       cities = [];
     }
     h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px">';
@@ -975,6 +954,8 @@
         '<div class="row" style="justify-content:space-between;align-items:center;gap:8px"><button class="btn sm" data-dl="' + esc(c) + '">Descargar Excel</button>' + (kg ? '<span class="muted" style="font-size:12px;white-space:nowrap">' + wk(kg) + '</span>' : '') + '</div></div>';
     });
     h += '</div>';
+    var bad = histOrders().filter(function (o) { return o.unread > 0 || o.totalOk === false || (o.poDate && o.date && dkey(o.date) < dkey(o.poDate)); });
+    if (bad.length) h += '<div class="banner" style="background:#fff3cd;border-color:#e0a800">⚠️ <b>' + bad.length + ' orden(es) por revisar</b> (total distinto al del PDF, líneas sin leer o fecha de entrega anterior al pedido): ' + '<ul style="margin:6px 0 0;padding-left:18px">' + bad.map(function (o) { return '<li>' + esc(o.chain + ' ' + o.oc + ' ' + o.city + (o.poDate && o.date && dkey(o.date) < dkey(o.poDate) ? ' (entrega ' + o.date + ')' : '')) + ' — ' + ordLinks(o) + '</li>'; }).join('') + '</ul></div>';
     el.innerHTML = h;
     var wc = $('#waQc'); if (wc) wc.onclick = function () { var ta = $('#waQ'); ta.select(); var ok = false; try { ok = document.execCommand('copy'); } catch (x) {} if (!ok && navigator.clipboard) navigator.clipboard.writeText(ta.value).then(function () { toast('Mensaje copiado'); }, function () {}); else toast(ok ? 'Mensaje copiado' : 'Selecciona el texto y cópialo'); };
     var sn = $('#syncNow'); if (sn) sn.onclick = function () { driveSync(true); };
@@ -984,7 +965,6 @@
     var ca = $('#calAll'); if (ca) ca.onclick = function () { S.hoyDate = '*'; renderHoy(); };
     el.querySelectorAll('[data-oc]').forEach(function (b) { b.onclick = function () { S.oChain = b.dataset.oc; S.openList = ''; renderHoy(); }; });
     el.querySelectorAll('[data-dm]').forEach(function (b) { b.onclick = function () { if (S.dateMode === b.dataset.dm) return; S.dateMode = b.dataset.dm; S.hoyDate = ''; S.openList = ''; renderHoy(); }; });
-    el.querySelectorAll('[data-dnav]').forEach(function (b) { b.onclick = function () { var asc = dates.slice().sort(function (a, c) { return dkey(a) - dkey(c); }), ix = asc.indexOf(S.hoyDate) + (+b.dataset.dnav); if (asc[ix]) { S.hoyDate = asc[ix]; S.openList = ''; renderHoy(); } }; });
     var ctg = $('#calTg'); if (ctg) ctg.onclick = function () { S.calOpen = S.calOpen === false; renderHoy(); };
     el.querySelectorAll('[data-ch]').forEach(function (b) { b.onclick = function () { S.bChain = b.dataset.ch; S.openList = ''; renderHoy(); }; });
     el.querySelectorAll('[data-ls]').forEach(function (b) { b.onclick = function () { S.openList = S.openList === b.dataset.ls ? '' : b.dataset.ls; renderHoy(); }; });
@@ -992,8 +972,7 @@
     el.querySelectorAll('[data-hv]').forEach(function (b) { b.onclick = function () { S.hView = b.dataset.hv; if (S.hView === 'dest' && S.hoyDate === '*') S.hoyDate = ''; S.openList = ''; renderHoy(); }; });
     var cw = $('#cWa'); if (cw) { cw.href = waLink(consWa(base)); $('#cDl').onclick = function () { dlCons(baseAll.filter(function (d) { return d.chain === S.bChain; }), 'Consolidado ' + S.bChain + ' ' + (S.hoyDate === '*' ? 'todos los dias' : S.hoyDate) + '.xlsx'); }; }
     el.querySelectorAll('[data-ck]').forEach(function (b) { b.onchange = function () { if (b.checked) S.hist.picked[b.dataset.ck] = (S.user && S.user.name) || 1; else delete S.hist.picked[b.dataset.ck]; saveHist(); var tr = b.closest('tr'); tr.style.opacity = b.checked ? '.45' : ''; var n = el.querySelectorAll('[data-ck]'), d = 0; n.forEach(function (x) { if (x.checked) d++; }); $('#consCnt').textContent = d + ' / ' + n.length + ' productos sacados'; }; });
-    var wa = $('#hWa'); if (wa) wa.href = waLink(waDay(baseAll, uniq(baseAll.map(function (d) { return d.city; })).sort()));
-    $('#hAll').onclick = function () { dlOla(baseAll, false, 'Pedidos OLA ' + S.hoyDate + '.xlsx', { merge: true }); };
+    var ha = $('#hAll'); if (ha) ha.onclick = function () { dlOla(baseAll, false, 'Pedidos OLA ' + dayTxt() + '.xlsx', { merge: true }); };
     el.querySelectorAll('[data-dl]').forEach(function (b) { b.onclick = function () { var c = b.dataset.dl; dlOla(baseAll.filter(function (d) { return d.city === c; }), false, 'Pedido ' + c + ' ' + S.hoyDate.replace(/\//g, '-') + '.xlsx', { merge: true }); }; });
     el.querySelectorAll('[data-st]').forEach(function (b) { b.onclick = function () { var k = b.dataset.st, cur = S.hist.status[k] || 'nuevo'; S.hist.status[k] = STAT[(STAT.indexOf(cur) + 1) % 3]; saveHist(); renderHoy(); }; });
   }
