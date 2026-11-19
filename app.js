@@ -429,7 +429,7 @@
   function waCity(c, rows) {
     rows = mergeRows(az(rows));
     var t = '*Pedido ' + c + '* · ' + modeLbl() + dayTxt() + '\n' + rows.length + ' productos\n';
-    az(rows).forEach(function (d) { t += '• ' + d.name + ': ' + qtyTxt(d) + (d.chain ? ' (' + d.chain + ')' : '') + '\n'; });
+    az(rows).forEach(function (d) { t += '• ' + d.name + ': ' + qtyEq(d) + (d.chain ? ' (' + d.chain + ')' : '') + '\n'; });
     return t;
   }
   // mensaje de WhatsApp de lo buscado: primero cada ciudad con sus productos y al final el total
@@ -438,11 +438,11 @@
     var t = '*Pedido: ' + label + '* · ' + modeLbl() + dayTxt() + '\n';
     cs.forEach(function (c) {
       t += '\n*' + c + '*\n';
-      mergeRows(az(rows.filter(function (d) { return d.city === c; }))).forEach(function (d) { t += '• ' + d.name + ': ' + qtyTxt(d) + (d.chain ? ' (' + d.chain + ')' : '') + '\n'; });
+      mergeRows(az(rows.filter(function (d) { return d.city === c; }))).forEach(function (d) { t += '• ' + d.name + ': ' + qtyEq(d) + (d.chain ? ' (' + d.chain + ')' : '') + '\n'; });
     });
     var cr = consRows(rows), kg = 0; cr.forEach(function (p) { kg += p.kg || 0; });
     t += '\n*TOTAL*\n';
-    cr.forEach(function (p) { t += '• ' + p.name + ': ' + consQty(p, p.qty, p.cx).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() + '\n'; });
+    cr.forEach(function (p) { t += '• ' + p.name + ': ' + consQty(p, p.qty, p.cx, p.kg).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() + '\n'; });
     return t + cr.length + ' producto(s)' + (kg ? ' · ≈ ' + wk(kg) : '') + ' · ' + cs.length + ' destino(s)\n';
   }
   function waDay(base, cities) {
@@ -454,6 +454,18 @@
   // la papa sin lavar se cuenta en costales; el resto de productos en canastillas
   function cxWord(name, short) { return 'CX'; }
   function isCostal(name) { return /PAPA SIN LAVAR/.test(L.norm(name)); }
+  // equivalencias de empaque: papa sin lavar = 12 kg por pucha (costal); tomate de árbol a granel = 6 kg por canastilla.
+  // Se SUMAN a lo que ya se muestra, no lo reemplazan.
+  function eqOf(name, kg) {
+    var e = O.eqOf(name, kg); return e ? e.replace(/^(\d+),(\d)/, '$1,$2').replace(/^(\d{4,})/, function (m) { return fmt(+m); }) : '';
+  }
+  function eqTxt(d) {
+    if (d.chain === 'Éxito' || d.word === 'kilos') return eqOf(d.name, d.kg || d.qty);
+    // zanahoria en paquetes/bolsas: 12 por CX (solo si la línea no trae ya sus CX)
+    if (/ZANAHORIA/.test(L.norm(d.name)) && !d.cx && /PAQUETE|PQT|BOLSA/.test(L.norm(d.name)) && d.qty > 0) { var r = Math.round(d.qty / 12 * 10) / 10; return String(r).replace('.', ',') + ' CX'; }
+    return '';
+  }
+  function qtyEq(d) { var e = eqTxt(d); return qtyTxt(d) + (e ? ' (= ' + e + ')' : ''); }
   function qtyTxt(d) {
     if (d.chain === 'Éxito' || d.word === 'kilos') return wk(d.qty);
     var w = d.word || 'unid.';
@@ -486,7 +498,7 @@
       items.forEach(function (x) {
         var d = x.d, qt = qtyTxt(d), sub = [];
         if (d.parts.length > 1) sub.push(d.parts.map(function (p) { return 'OC ' + esc(p.oc) + ': ' + esc(qtyTxt(p)); }).join(' · '));
-        var who = S.hist.picked[x.ks[0]], kgTxt = d.kg && d.chain !== 'Éxito' && !/\bkg\b|\bt$/.test(qt) ? '<small class="muted">≈ ' + wk(d.kg) + '</small>' : '';
+        var who = S.hist.picked[x.ks[0]], eq = eqTxt(d), kgTxt = eq ? '<small class="eq">= ' + esc(eq) + '</small>' : (d.kg && d.chain !== 'Éxito' && !/\bkg\b|\bt$/.test(qt) ? '<small class="muted">≈ ' + wk(d.kg) + '</small>' : '');
         h += '<label class="ck' + (x.on ? ' done' : '') + '" data-nm="' + esc(L.norm(d.name)) + '"><input type="checkbox" data-pks="' + esc(x.ks.join('¦')) + '" data-c="' + esc(c) + '"' + (x.on ? ' checked' : '') + '><span class="nm">' + esc(d.name) + (sub.length ? '<small class="muted">' + sub.join(' · ') + '</small>' : '') + (x.on && typeof who === 'string' ? '<small class="muted">✔ ' + esc(who) + '</small>' : '') + '</span><b class="q">' + esc(qt) + kgTxt + '</b></label>';
       });
       h += '</details>';
@@ -515,9 +527,10 @@
     });
     return az(order.map(function (k) { return m[k]; }));
   }
-  function consQty(p, q, cx) {
-    if (p.chain === 'Éxito') return wk(q);
-    if (p.word === 'kilos') return wk(q) + (cx ? ' <span class="muted" style="font-size:11px">(' + fmt(cx) + ' ' + cxWord(p.name, 1) + ')</span>' : '');
+  function consQty(p, q, cx, kg) {
+    var e = (p.chain === 'Éxito' || p.word === 'kilos') ? eqOf(p.name, kg || q) : '', es = e ? ' <span class="eq">= ' + e + '</span>' : '';
+    if (p.chain === 'Éxito') return wk(q) + es;
+    if (p.word === 'kilos') return wk(q) + (cx ? ' <span class="muted" style="font-size:11px">(' + fmt(cx) + ' ' + cxWord(p.name, 1) + ')</span>' : '') + es;
     return fmt(q) + ' ' + (p.word || 'unid.') + (cx ? ' <span class="muted" style="font-size:11px">(' + fmt(cx) + ' ' + cxWord(p.name, 1) + ')</span>' : '');
   }
   function consKey(p) { return (S.dateMode === 'ped' ? 'P' : '') + S.hoyDate + '|CONS|' + p.chain + '|' + p.name; }
@@ -528,15 +541,15 @@
     cr.forEach(function (p) {
       var k = consKey(p), on = !!S.hist.picked[k];
       h += '<tr data-cr style="border-top:1px solid var(--bd);' + (on ? 'opacity:.45' : '') + '"><td style="padding:8px 6px;position:sticky;left:0;background:#fff"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" style="width:22px;height:22px" data-ck="' + esc(k) + '"' + (on ? ' checked' : '') + '>' + esc(p.name) + '</label></td>' +
-        '<td style="padding:6px;white-space:nowrap;font-weight:700;text-align:right">' + consQty(p, p.qty, p.cx) + (p.kg && p.chain !== 'Éxito' && p.word !== 'kilos' ? '<br><span class="muted" style="font-size:11px;font-weight:400">≈ ' + wk(p.kg) + '</span>' : '') + '</td>' +
-        cities.map(function (c) { var b = p.by[c]; return '<td style="padding:6px;white-space:nowrap;text-align:right">' + (b ? consQty(p, b.qty, b.cx) : '<span class="muted">–</span>') + '</td>'; }).join('') + '</tr>';
+        '<td style="padding:6px;white-space:nowrap;font-weight:700;text-align:right">' + consQty(p, p.qty, p.cx, p.kg) + (p.kg && p.chain !== 'Éxito' && p.word !== 'kilos' ? '<br><span class="muted" style="font-size:11px;font-weight:400">≈ ' + wk(p.kg) + '</span>' : '') + '</td>' +
+        cities.map(function (c) { var b = p.by[c]; return '<td style="padding:6px;white-space:nowrap;text-align:right">' + (b ? consQty(p, b.qty, b.cx, b.kg) : '<span class="muted">–</span>') + '</td>'; }).join('') + '</tr>';
     });
     var tk = 0; cr.forEach(function (p) { tk += p.kg || 0; });
     return h + '</tbody><tfoot><tr style="border-top:3px solid #1F3864;font-weight:700"><td style="padding:8px 6px;position:sticky;left:0;background:#fff">TOTAL GENERAL (' + cr.length + ' productos)</td><td style="padding:6px;text-align:right;white-space:nowrap">≈ ' + wk(tk) + '</td>' + cities.map(function (c) { var ck = 0; cr.forEach(function (p) { if (p.by[c]) ck += p.by[c].kg || 0; }); return '<td style="padding:6px;text-align:right;white-space:nowrap">≈ ' + wk(ck) + '</td>'; }).join('') + '</tr></tfoot></table></div></div>';
   }
   function consWa(rows) {
     var t = '*Consolidado ' + S.bChain + ' · ' + dayTxt() + '*\n';
-    consRows(rows).forEach(function (p) { t += '• ' + p.name + ': ' + consQty(p, p.qty, p.cx).replace(/<[^>]+>/g, '') + '\n'; });
+    consRows(rows).forEach(function (p) { t += '• ' + p.name + ': ' + consQty(p, p.qty, p.cx, p.kg).replace(/<[^>]+>/g, '') + '\n'; });
     return t;
   }
   // Excel del consolidado: la misma hoja "CONSOLIDADO ALMACENES" de siempre (colores por ciudad, grupos y subtotales)

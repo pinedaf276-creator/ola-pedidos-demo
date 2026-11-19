@@ -91,6 +91,14 @@
   }
 
   // rows: [{chain,date,oc,city,name,ara,sku,unit,cx,emb,qty,word,price,prov}]
+  function eqOf(name, kg) {
+    var n = norm(name), per = 0, w = '', ws = '';
+    if (/PAPA SIN LAVAR/.test(n)) { per = 12; w = 'pucha'; ws = 'puchas'; }
+    else if (/TOMATE (DE )?ARBOL/.test(n) && !/PAQUETE|PQT|PAQ /.test(n)) { per = 6; w = 'canastilla'; ws = 'canastillas'; }
+    if (!per || !(kg > 0)) return '';
+    var r = Math.round(kg / per * 10) / 10, whole = Math.abs(r - Math.round(r)) < 1e-9;
+    return (whole ? String(Math.round(r)) : String(r).replace('.', ',')) + ' ' + (r === 1 ? w : ws);
+  }
   function groupOrders(rows, merge) {
     var ord = {}, keys = [];
     rows.forEach(function (d) {
@@ -101,7 +109,7 @@
       var nm = d.ara || d.name, ref = d.ref || refCx(nm), cx = d.cx || 0, emb = d.emb || (cx ? d.qty / cx : 0);
       if (ref === 'MINI' && norm(d.city) === 'CUCUTA') ref = 'MINI IFCO';
       if (ref === 'BULTO' && emb >= 12 && /SIN LAVAR/.test(norm(nm))) ref = 'BULTO';
-      ord[k].lines.push({ name: nm, cx: cx, qty: d.qty, emb: emb, unit: unitOf(d.unit || d.word || ''), word: d.word, ref: ref, pres: presOf(d.name + ' ' + (d.ara || '')), price: d.price || 0, prov: d.prov || '', sinCx: !cx, est: !!d.est, cap: d.cap || 0, obs: d.chain + ' ' + d.oc + (d.est ? ' (cajas calculadas)' : '') });
+      ord[k].lines.push({ name: nm, cx: cx, qty: d.qty, emb: emb, unit: unitOf(d.unit || d.word || ''), word: d.word, ref: ref, pres: presOf(d.name + ' ' + (d.ara || '')), price: d.price || 0, prov: d.prov || '', sinCx: !cx, est: !!d.est, kg: d.kg || 0, eqOk: (d.chain === 'Éxito' || d.word === 'kilos'), cap: d.cap || 0, obs: d.chain + ' ' + d.oc + (d.est ? ' (cajas calculadas)' : '') });
     });
     // si el mismo producto viene en varias órdenes de la ciudad, va en un solo renglón (la observación dice de cuáles órdenes)
     keys.forEach(function (k) {
@@ -110,7 +118,7 @@
       ord[k].lines.forEach(function (l) {
         var key = [l.name, l.unit, l.ref, l.pres, Math.round((l.emb || 0) * 1000), l.price].join('|'), g = m[key];
         if (!g) { g = m[key] = Object.assign({}, l, { _o: [] }); g.cx = 0; g.qty = 0; out.push(g); }
-        g.cx += l.cx || 0; g.qty += l.qty || 0; g.sinCx = g.sinCx && l.sinCx; g.est = g.est || l.est; g._o.push({ o: l.obs, cx: l.cx || 0 });
+        g.cx += l.cx || 0; g.qty += l.qty || 0; g.kg = (g.kg || 0) + (l.kg || 0); g.sinCx = g.sinCx && l.sinCx; g.est = g.est || l.est; g._o.push({ o: l.obs, cx: l.cx || 0 });
       });
       out.forEach(function (g) { if (g._o.length > 1) g.obs = g._o.map(function (p) { return p.o + (p.cx ? ' (' + p.cx + ' CX)' : ''); }).join(' + '); delete g._o; });
       ord[k].lines = out;
@@ -176,7 +184,7 @@
       var est = l.sinCx ? 0 : l.cx / cap;
       cell(ws, r, cEst1, l.sinCx ? '' : { formula: 'ROUND(' + col(cPed) + r + '/' + cap + ',2)', result: Math.round(est * 100) / 100 }, st({ horizontal: 'center' }, '0.00'));
       cell(ws, r, cEst2, l.sinCx ? '' : { formula: 'ROUNDUP(' + col(cEst1) + r + ',0)', result: Math.ceil(est - 1e-9) }, st({ horizontal: 'center' }, '0'));
-      cell(ws, r, cEst2 + 1, '', st()); cell(ws, r, cEst2 + 2, o.merged ? l.obs : '', st());
+      cell(ws, r, cEst2 + 1, '', st()); cell(ws, r, cEst2 + 2, [o.merged ? l.obs : '', (l.eqOk ? eqOf(l.name, l.kg || l.qty) : '') ? '= ' + eqOf(l.name, l.kg || l.qty) : ''].filter(Boolean).join(' · '), st());
       if (!l.sinCx) { if (l.ref === 'MEDIANA') packs.MEDIANA += l.cx; else if (/^MINI/.test(l.ref)) packs.MINI += l.cx; else if (l.ref === 'BULTO' && l.emb >= 12 && /SIN LAVAR/.test(norm(l.name))) packs.B += l.cx; else packs.A += l.cx; }
       r++;
     });
@@ -316,6 +324,6 @@
     rows.forEach(function (d) { var c = d.cx || 0; cx += c; qty += d.qty || 0; est += c / (d.cap || capOf(d.ref || refCx(d.ara || d.name))); });
     return { cx: cx, est: est, qty: qty, lines: rows.length };
   }
-  root.OlaXlsx = { groupOf: groupOf, GROUPS: GROUPS, build: build, refCx: refCx, groupOrders: groupOrders, lookup: lookup, capOf: capOf, stats: stats };
+  root.OlaXlsx = { groupOf: groupOf, GROUPS: GROUPS, eqOf: eqOf, build: build, refCx: refCx, groupOrders: groupOrders, lookup: lookup, capOf: capOf, stats: stats };
   if (typeof module !== 'undefined') module.exports = root.OlaXlsx;
 })(typeof window !== 'undefined' ? window : globalThis);
