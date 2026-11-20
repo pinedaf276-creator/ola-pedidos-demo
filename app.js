@@ -1002,17 +1002,17 @@
     h += '<div class="hoyTop">' + calHtml(!bod && !consV && S.oChain ? all.filter(function (d) { return d.chain === S.oChain; }) : all, consV) +
       '<div class="card" style="padding:12px 14px"><div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:' + (ped ? '4' : '10') + 'px"><span class="muted" style="font-size:12px">Calendario por</span><div class="seg" style="margin:0"><button data-dm="ent"' + (ped ? '' : ' class="on"') + '>Fecha de entrega</button><button data-dm="ped"' + (ped ? ' class="on"' : '') + '>Fecha de pedido</button></div></div>' +
       (ped ? '<p class="muted" style="margin:0 0 10px;font-size:12px">Por el día en que se hizo el pedido. Si una orden no trae esa fecha, sale en su día de entrega.</p>' : '') +
-      '<input id="hq" type="search" value="' + esc(S.hq || '') + '" placeholder="🔍 Buscar producto, orden o ciudad… (varios: tomate, papa)" style="width:100%;font-size:17px;padding:10px;box-sizing:border-box;margin-bottom:10px">' +
       '<div class="row" style="gap:10px"><button class="btn' + (consV ? ' sec' : '') + '" style="flex:1" data-hv="dest">📍 Por destino</button><button class="btn' + (consV ? '' : ' sec') + '" style="flex:1" data-hv="cons">📊 Consolidado del día</button></div></div></div>';
     if (!bod && !consV && chainsDay.length > 1) h += '<div class="row" style="gap:8px;margin:0 0 12px;align-items:center;flex-wrap:wrap"><span class="muted">Ver:</span>' + [['', 'Todos']].concat(chainsDay.map(function (c) { return [c, (c === 'Ara' ? '🔴 ' : '🟡 ') + c + ' (' + cc[c] + ')']; })).map(function (p) { return '<button class="btn' + ((S.oChain || '') === p[0] ? '' : ' sec') + ' sm" data-oc="' + esc(p[0]) + '">' + p[1] + '</button>'; }).join('') + '</div>';
     if (bod || consV) h += '<div class="row" style="gap:10px;margin:0 0 12px">' + chainsDay.map(function (c) { var on = c === S.bChain; return '<button class="btn' + (on ? '' : ' sec') + '" style="flex:1;font-size:18px;padding:14px" data-ch="' + esc(c) + '">' + (c === 'Ara' ? '🔴 ' : '🟡 ') + esc(c) + ' <small>(' + cc[c] + ' prod.)</small></button>'; }).join('') + '</div>';
+    h += '<input id="hq" type="search" value="' + esc(S.hq || '') + '" placeholder="🔍 Buscar producto, orden o ciudad… (varios: tomate, papa)" style="width:100%;font-size:17px;padding:10px;box-sizing:border-box;margin:0 0 12px">';
     var unk = histOrders().filter(function (o) { return o.chain === 'Ara' && o.totalOk == null && o.declared != null; }).length;
     if (q && !base.length) h += '<div class="card"><p class="muted">Nada coincide con “' + esc(S.hq) + '” en este día.</p></div>';
     h += '<p class="muted" style="margin:0 0 10px">' + (q ? 'Resultado de la búsqueda: ' : '') + cities.length + ' destinos · ' + Object.keys(nOrd).length + ' órdenes · ' + base.length + ' productos</p>';
     var waQt = qs.length && base.length ? waSearch(base, (S.hq || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean).join(', ')) : '';
     if (waQt) h += '<div class="card" style="padding:12px 14px"><div class="row" style="justify-content:space-between;gap:8px"><b>💬 Mensaje para WhatsApp</b><span class="muted" style="font-size:12px">por ciudad y al final el total</span></div><textarea id="waQ" readonly rows="9" style="width:100%;box-sizing:border-box;margin:8px 0;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace">' + esc(waQt) + '</textarea><div class="row" style="gap:8px"><a class="btn" id="waQb" target="_blank" rel="noopener" href="' + waLink(waQt) + '">💬 Enviar por WhatsApp</a><button class="btn sec" id="waQc">📋 Copiar mensaje</button></div></div>';
     if (consV) {
-      h += '<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><a class="btn sec" id="cWa" target="_blank" rel="noopener">💬 WhatsApp del consolidado</a><button class="btn" id="cDl">Descargar consolidado (Excel)</button><button class="btn sec" id="hAll">Descargar todo el día (una hoja por ciudad)</button></div>' + consHtml(base, cities);
+      h += '<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><a class="btn sec" id="cWa" target="_blank" rel="noopener">💬 WhatsApp del consolidado</a><button class="btn" id="cDl">Descargar consolidado (Excel)</button></div>' + consHtml(base, cities);
       cities = [];
     }
     var cubAll = O.cubic(base);
@@ -1031,6 +1031,7 @@
         '<div class="row" style="justify-content:space-between;align-items:center;gap:8px"><button class="btn sm" data-dl="' + esc(c) + '">Descargar Excel</button>' + (kg ? '<span class="muted" style="font-size:12px;white-space:nowrap">' + wk(kg) + '</span>' : '') + '</div></div>';
     });
     h += '</div>';
+    if (baseAll.length) h += '<div class="row" style="gap:8px;margin:14px 0 0"><button class="btn sec" id="hAll">Descargar todo el día (una hoja por ciudad)</button></div>';
     var bad = histOrders().filter(function (o) { return o.unread > 0 || o.totalOk === false || (o.poDate && o.date && dkey(o.date) < dkey(o.poDate)); });
     if (bad.length) h += '<div class="banner" style="background:#fff3cd;border-color:#e0a800">⚠️ <b>' + bad.length + ' orden(es) por revisar</b> (total distinto al del PDF, líneas sin leer o fecha de entrega anterior al pedido): ' + '<ul style="margin:6px 0 0;padding-left:18px">' + bad.map(function (o) { return '<li>' + esc(o.chain + ' ' + o.oc + ' ' + o.city + (o.poDate && o.date && dkey(o.date) < dkey(o.poDate) ? ' (entrega ' + o.date + ')' : '')) + ' — ' + ordLinks(o) + '</li>'; }).join('') + '</ul></div>';
     el.innerHTML = h;
