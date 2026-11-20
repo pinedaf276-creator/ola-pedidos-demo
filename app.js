@@ -1153,43 +1153,37 @@
   }
 
 
-  // resumen del día (junto al calendario, solo en pantallas anchas; sin precios)
-  function daySum(all) {
+  // lo que hay que revisar (total distinto al PDF, líneas sin leer, fecha anterior al pedido), con enlaces al correo y al original
+  function revList() { return histOrders().filter(function (o) { return o.unread > 0 || o.totalOk === false || (o.poDate && o.date && dkey(o.date) < dkey(o.poDate)); }); }
+  function revBanner(bad, id) {
+    return '<div' + (id ? ' id="' + id + '"' : '') + ' class="banner" style="background:#fff3cd;border-color:#e0a800">⚠️ <b>' + bad.length + ' orden(es) por revisar</b> (total distinto al del PDF, líneas sin leer o fecha de entrega anterior al pedido): ' + '<ul style="margin:6px 0 0;padding-left:18px">' + bad.map(function (o) { return '<li>' + esc(o.chain + ' ' + o.oc + ' ' + o.city + (o.poDate && o.date && dkey(o.date) < dkey(o.poDate) ? ' (entrega ' + o.date + ')' : '')) + ' — ' + ordLinks(o) + '</li>'; }).join('') + '</ul></div>';
+  }
+  // cinta discreta arriba de Hoy: datos del día que se mueven y se actualizan solos (sin precios)
+  function dayTicker(all) {
     var rows = all.filter(function (d) { return S.hoyDate === '*' || hdate(d) === S.hoyDate; });
     if (!rows.length) return '';
-    var ord = {}, oc = { Ara: {}, 'Éxito': {} }, prod = {}, city = {}, byC = {}, kg = 0, es = 0, isAdm = !!(S.user && S.user.role === 'admin'), bodR = S.user && S.user.role === 'bodega';
-    rows.forEach(function (d) { ord[d.chain + '|' + d.oc] = 1; (oc[d.chain] = oc[d.chain] || {})[d.oc] = 1; prod[d.chain + '|' + L.norm(d.name)] = 1; city[d.city] = (city[d.city] || 0) + (d.kg || 0); (byC[d.city] = byC[d.city] || []).push(d); kg += d.kg || 0; if (d.kgq === 'es') es += d.kg || 0; });
-    var cl = Object.keys(city).sort(function (a, b) { return city[b] - city[a]; }), max = Math.max.apply(null, cl.map(function (c) { return city[c]; }).concat([1])), nA = Object.keys(oc.Ara).length, nE = Object.keys(oc['Éxito']).length;
-    var tile = function (b, l, sub) { return '<div class="dtile"><b>' + b + '</b><span>' + l + '</span>' + (sub ? '<i>' + sub + '</i>' : '') + '</div>'; };
-    // alistado: lo ya sacado de la bodega
-    var pn = 0, pt = 0, pc = {};
-    cl.forEach(function (c) { var p = pickInfo(c, byC[c]); pc[c] = p; pn += p.n; pt += p.t; });
-    var pp = pt ? Math.round(pn / pt * 100) : 0;
-    var h = '<div class="dsum"><div class="dsh">Resumen · ' + esc(dayTxt()) + '</div><div class="dtiles">' +
-      tile(Object.keys(ord).length, 'órdenes', (nA ? '🔴 ' + nA : '') + (nA && nE ? '  ' : '') + (nE ? '🟡 ' + nE : '')) + tile(cl.length, 'destinos', '') + tile(Object.keys(prod).length, 'productos', '') + tile((es ? '≈ ' : '') + wk(kg), 'de peso', '') + '</div>';
-    h += '<div class="dsh" style="margin-top:14px">Alistado del día</div><div class="dprog"><u><i style="width:' + pp + '%;background:' + (pp === 100 ? '#2e8b57' : '#A93632') + '"></i></u><b>' + pp + '%</b><span>' + fmt(pn) + ' de ' + fmt(pt) + ' productos sacados</span></div>';
-    h += '<div class="dsh" style="margin-top:14px">Por destino · peso y alistado</div>' + cl.slice(0, 8).map(function (c) {
-      var col = CITY_COL[L.norm(c).replace(/ /g, '')] || '#BFBFBF', p = pc[c], done = p.t && p.n === p.t;
-      return '<div class="dbar"><span title="' + esc(c) + '">' + esc(c) + '</span><u><i style="width:' + Math.max(city[c] ? 3 : 0, city[c] / max * 100).toFixed(1) + '%;background:' + col + '"></i></u><b>' + wk(city[c]) + '</b><em class="' + (done ? 'ok' : '') + '">' + (done ? '✔ ' : '') + p.n + '/' + p.t + '</em></div>';
-    }).join('');
-    // carga del día (solo Ara: tiene cubicaje)
-    var ar = rows.filter(function (d) { return d.chain === 'Ara'; });
-    if (ar.length) {
-      var cu = O.cubic(ar).tot;
-      if (cu && cu.cx) h += '<div class="dsh" style="margin-top:14px">Carga del día · Ara</div><div class="dtiles">' + tile(n1(cu.cx), 'cajas', '') + tile(n1(cu.est1, 1), 'estibas', 'hasta ' + n1(cu.est2) + ' si van separadas') + tile(wk(cu.total), 'con empaque', '') + tile(n1(cu.cub, 1), 'cubicaje', '') + '</div>';
+    var bodR = S.user && S.user.role === 'bodega', ord = {}, oc = { Ara: {}, 'Éxito': {} }, city = {}, byC = {}, kg = 0, es = 0;
+    rows.forEach(function (d) { ord[d.chain + '|' + d.oc] = 1; (oc[d.chain] = oc[d.chain] || {})[d.oc] = 1; (byC[d.city] = byC[d.city] || []).push(d); city[d.city] = 1; kg += d.kg || 0; if (d.kgq === 'es') es += d.kg || 0; });
+    var cl = Object.keys(city), pn = 0, pt = 0, nA = Object.keys(oc.Ara).length, nE = Object.keys(oc['Éxito']).length;
+    cl.forEach(function (c) { var p = pickInfo(c, byC[c]); pn += p.n; pt += p.t; });
+    var pp = pt ? Math.round(pn / pt * 100) : 0, it = [], pin = [];
+    it.push('<span class="tki">📅 <b>' + esc(dayTxt()) + '</b></span>');
+    it.push('<span class="tki">📦 <b>' + Object.keys(ord).length + '</b> órdenes' + (nA && nE ? ' (🔴' + nA + ' 🟡' + nE + ')' : '') + '</span>');
+    it.push('<span class="tki">📍 <b>' + cl.length + '</b> destinos</span>');
+    it.push('<span class="tki">⚖️ <b>' + (es ? '≈ ' : '') + wk(kg) + '</b></span>');
+    it.push('<span class="tki' + (pp === 100 ? ' ok' : '') + '">✅ alistado <b>' + pp + '%</b> <span class="tkb"><i style="width:' + pp + '%;background:' + (pp === 100 ? '#2e8b57' : '#A93632') + '"></i></span> ' + fmt(pn) + '/' + fmt(pt) + '</span>');
+    var ar = rows.filter(function (d) { return d.chain === 'Ara'; }), cu = ar.length ? O.cubic(ar).tot : null;
+    if (cu && cu.cx) it.push('<span class="tki">🚚 Ara: <b>' + n1(cu.cx) + '</b> cajas · <b>' + n1(cu.est1, 1) + '</b> estibas · ' + wk(cu.total) + '</span>');
+    if (!bodR) {
+      var bad = revList(), sp = {}, se = {};
+      ar.forEach(function (d) { if (!d.kg && !d.frozen) sp[L.norm(d.name)] = 1; if (!(O.capByName(d.ara || d.name) || d.cap || d.ref)) se[L.norm(d.name)] = 1; });
+      var nsp = Object.keys(sp).length, nse = Object.keys(se).length;
+      if (bad.length) pin.push('<a class="tki warn" href="#" data-rev="1">⚠️ <b>' + bad.length + '</b> <span class="tkt">orden(es) por revisar · ver correos</span><span class="tkm">por revisar</span> ' + (S.revOpen ? '▴' : '▾') + '</a>');
+      if (nsp) pin.push('<span class="tki warn tkd">⚠️ <b>' + nsp + '</b> producto(s) sin peso</span>');
+      if (nse) pin.push('<span class="tki warn tkd">⚠️ <b>' + nse + '</b> sin medida de estiba</span>');
+      if (!bad.length && !nsp && !nse) pin.push('<span class="tki ok">✔ todo en orden</span>');
     }
-    // atención: lo que hay que revisar
-    var al = [], badO = histOrders().filter(function (o) { return o.unread > 0 || o.totalOk === false || (o.poDate && o.date && dkey(o.date) < dkey(o.poDate)); });
-    if (badO.length && !bodR) al.push('<b>' + badO.length + '</b> orden(es) con total distinto al PDF, líneas sin leer o fecha dudosa. Están al final de esta página.');
-    var sinPeso = {}, sinEst = {};
-    ar.forEach(function (d) { if (!d.kg && !d.frozen) sinPeso[L.norm(d.name)] = d.name; if (!(O.capByName(d.ara || d.name) || d.cap || d.ref)) sinEst[L.norm(d.name)] = d.name; });
-    var nsp = Object.keys(sinPeso), nse = Object.keys(sinEst);
-    if (nsp.length && !bodR) al.push('<b>' + nsp.length + '</b> producto(s) sin peso conocido: ' + esc(nsp.slice(0, 3).map(function (k) { return sinPeso[k]; }).join(', ')) + (nsp.length > 3 ? '…' : '') + '. El peso total queda corto.');
-    if (nse.length && !bodR) al.push('<b>' + nse.length + '</b> producto(s) sin medida de estiba: ' + esc(nse.slice(0, 3).map(function (k) { return sinEst[k]; }).join(', ')) + (nse.length > 3 ? '…' : '') + '. El cubicaje usa una medida general.');
-    if (!bodR) h += '<div class="dsh" style="margin-top:14px">Atención</div>' + (al.length ? '<div class="dwarn">' + al.map(function (x) { return '<div>⚠️ ' + x + '</div>'; }).join('') + '</div>' : '<div class="dok">✔ Todo en orden: sin órdenes por revisar ni productos sin medida.</div>');
-    // borrador: pedido → despachado → recibido → devuelto (se activa cuando carguemos despachos y comprobantes)
-    if (isAdm) h += '<div class="dsh" style="margin-top:14px">Cumplimiento · borrador</div><div class="dfun"><div class="on"><b>' + wk(kg) + '</b><span>Pedido</span></div><div><b>—</b><span>Despachado</span></div><div><b>—</b><span>Recibido</span></div><div><b>—</b><span>Devuelto</span></div></div><p class="muted" style="margin:4px 0 0;font-size:11.5px">Se activa cuando carguemos los despachos y los comprobantes de Ara.</p>';
-    return h + '</div>';
+    return '<div id="tick" class="tick"><div class="tkv"><div class="tkw"><div class="tk">' + it.join('') + '</div></div></div>' + (pin.length ? '<div class="tkp">' + pin.join('') + '</div>' : '') + '</div>' + (S.revOpen && !bodR && revList().length ? revBanner(revList(), 'revBox') : '');
   }
   function renderHoy() {
     var el = $('#p-hoy'), all = histDetail();
@@ -1211,10 +1205,11 @@
     var cnt = histOrders().length, h = syncBanner();
     if (S.prevCnt != null && cnt > S.prevCnt && S.sync.state !== 'run') h += '<div class="banner ok">🆕 Llegaron <b>' + (cnt - S.prevCnt) + '</b> orden(es) nueva(s) desde la última vez que abriste la app.</div>';
     var ped = S.dateMode === 'ped';
+    h += dayTicker(all);
     h += '<div class="hoyTop">' + calHtml(!bod && !consV && S.oChain ? all.filter(function (d) { return d.chain === S.oChain; }) : all, consV) +
       '<div class="card" style="padding:12px 14px"><div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:' + (ped ? '4' : '10') + 'px"><span class="muted" style="font-size:12px">Calendario por</span><div class="seg" style="margin:0"><button data-dm="ent"' + (ped ? '' : ' class="on"') + '>Fecha de entrega</button><button data-dm="ped"' + (ped ? ' class="on"' : '') + '>Fecha de pedido</button></div></div>' +
       (ped ? '<p class="muted" style="margin:0 0 10px;font-size:12px">Por el día en que se hizo el pedido. Si una orden no trae esa fecha, sale en su día de entrega.</p>' : '') +
-      '<div class="row" style="gap:10px"><button class="btn' + (consV ? ' sec' : '') + '" style="flex:1" data-hv="dest">📍 Por destino</button><button class="btn' + (consV ? '' : ' sec') + '" style="flex:1" data-hv="cons">📊 Consolidado del día</button></div>' + daySum(all) + '</div></div>';
+      '<div class="row" style="gap:10px"><button class="btn' + (consV ? ' sec' : '') + '" style="flex:1" data-hv="dest">📍 Por destino</button><button class="btn' + (consV ? '' : ' sec') + '" style="flex:1" data-hv="cons">📊 Consolidado del día</button></div></div></div>';
     if (!bod && !consV && chainsDay.length > 1) h += '<div class="row" style="gap:8px;margin:0 0 12px;align-items:center;flex-wrap:wrap"><span class="muted">Ver:</span>' + [['', 'Todos']].concat(chainsDay.map(function (c) { return [c, (c === 'Ara' ? '🔴 ' : '🟡 ') + c + ' (' + cc[c] + ')']; })).map(function (p) { return '<button class="btn' + ((S.oChain || '') === p[0] ? '' : ' sec') + ' sm" data-oc="' + esc(p[0]) + '">' + p[1] + '</button>'; }).join('') + '</div>';
     if (!bod && consV && chainsDay.length > 1) h += '<div class="row" style="gap:8px;margin:0 0 12px;align-items:center;flex-wrap:wrap"><span class="muted">Ver:</span>' + chainsDay.map(function (c) { return '<button class="btn' + (c === S.bChain ? '' : ' sec') + ' sm" data-ch="' + esc(c) + '">' + (c === 'Ara' ? '🔴 ' : '🟡 ') + esc(c) + ' (' + cc[c] + ' prod.)</button>'; }).join('') + '</div>';
     if (bod) h += '<div class="row" style="gap:10px;margin:0 0 12px">' + chainsDay.map(function (c) { var on = c === S.bChain; return '<button class="btn' + (on ? '' : ' sec') + '" style="flex:1;font-size:18px;padding:14px" data-ch="' + esc(c) + '">' + (c === 'Ara' ? '🔴 ' : '🟡 ') + esc(c) + ' <small>(' + cc[c] + ' prod.)</small></button>'; }).join('') + '</div>';
@@ -1244,9 +1239,14 @@
     });
     h += '</div>';
     if (baseAll.length) h += '<div class="row" style="gap:8px;margin:14px 0 0"><button class="btn sec" id="hAll">Descargar todo el día (una hoja por ciudad)</button></div>';
-    var bad = histOrders().filter(function (o) { return o.unread > 0 || o.totalOk === false || (o.poDate && o.date && dkey(o.date) < dkey(o.poDate)); });
-    if (bad.length) h += '<div class="banner" style="background:#fff3cd;border-color:#e0a800">⚠️ <b>' + bad.length + ' orden(es) por revisar</b> (total distinto al del PDF, líneas sin leer o fecha de entrega anterior al pedido): ' + '<ul style="margin:6px 0 0;padding-left:18px">' + bad.map(function (o) { return '<li>' + esc(o.chain + ' ' + o.oc + ' ' + o.city + (o.poDate && o.date && dkey(o.date) < dkey(o.poDate) ? ' (entrega ' + o.date + ')' : '')) + ' — ' + ordLinks(o) + '</li>'; }).join('') + '</ul></div>';
+    var bad = revList();
+    if (bad.length) h += revBanner(bad, 'revBan');
     el.innerHTML = h;
+    var tk = $('#tick'); if (tk) {
+      var tv = tk.querySelector('.tkv'), tw = tk.querySelector('.tkw'), t1 = tk.querySelector('.tk');
+      if (t1.scrollWidth > tv.clientWidth + 2) { tk.classList.add('run'); var cl2 = t1.cloneNode(true); cl2.setAttribute('aria-hidden', 'true'); tw.appendChild(cl2); }
+      tk.onclick = function (ev) { var r = ev.target.closest && ev.target.closest('[data-rev]'); if (!r) return; ev.preventDefault(); S.revOpen = !S.revOpen; renderHoy(); };
+    }
     var wc = $('#waQc'); if (wc) wc.onclick = function () { var ta = $('#waQ'); ta.select(); var ok = false; try { ok = document.execCommand('copy'); } catch (x) {} if (!ok && navigator.clipboard) navigator.clipboard.writeText(ta.value).then(function () { toast('Mensaje copiado'); }, function () {}); else toast(ok ? 'Mensaje copiado' : 'Selecciona el texto y cópialo'); };
     var sn = $('#syncNow'); if (sn) sn.onclick = function () { driveSync(true); };
     $('#hq').oninput = function () { var p = this.selectionStart; S.hq = this.value; renderHoy(); var n = $('#hq'); n.focus(); try { n.setSelectionRange(p, p); } catch (x) {} };
