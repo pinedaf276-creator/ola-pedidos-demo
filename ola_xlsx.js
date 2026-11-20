@@ -37,6 +37,9 @@
     if (BUILTIN[k]) return { ref: BUILTIN[k][0], emb: BUILTIN[k][1], saved: false };
     return null;
   }
+  // cajas por estiba de cada producto (sacadas de las hojas de Barranquilla, Cartagena, Valledupar, Medellín y Cúcuta)
+  var CAPS = {"AGUACATE": 80, "AGUACATE HASS X 500 G": 35, "AJI TOPITO": 50, "BOROJO 190G": 40, "CALABACIN": 70, "CEBOLLA BLANCA LIMPIA": 30, "CEBOLLA ROJA MALLA X 750GR": 30, "CEBOLLA ROJA X 500 GR": 25, "CIRUELA BOLSA X 250": 80, "DURAZNO GRANEL": 80, "GRANADILLA": 80, "JENGIBRE X 150 GR": 40, "LIMON COMUN MALLA X 500 G": 60, "LIMON GRANEL": 100, "LIMON TAHITI 1KG MALLA": 30, "LULO": 80, "MANDARINA MALLA X 5 UNI": 35, "MARACUYA": 100, "PAPA CRIOLLA": 81, "PAPA CRIOLLA MINI 1000 GR": 45, "PAPA LAVADA X 500 G": 30, "PAPA PAREJA MALLA X 1 5 KG": 30, "PAPA PASTUSA PQT 2 5 KG": 30, "PAPA R12 PQT 2 5 KG": 30, "PAPA SIN LAVAR X 500 G": 30, "PIMENTON VERDE": 80, "PITAHAYA 500 GR": 100, "TOMATE CHERRY X 250 GR": 100, "TOMATE CHONTO 500 GR": 30, "TOMATE CHONTO MALLA X 1000": 30, "TOMATE DE ARBOL": 30, "TOMATE DE ARBOL PQT X 1KG": 45, "ZANAHORIA A GRANEL X 500 G": 48, "ZANAHORIA BOLSA X 1000G": 40, "ZANAHORIA Y REMOLACHA MIX": 80, "ARANDANOS 125G": 60, "CEBOLLA BLANCA SEMIPELADA": 30, "MANDARINA": 80, "NARANJA DE JUGO MALLA X 2 KG": 30, "PIMENTON ROJO X 500G": 80, "PINA ORO MIEL": 45, "REMOLACHA X 500 GR": 30, "SANDIA BABY": 36, "HABICHUELA": 80, "MANGO 500 GR": 100, "COCO X UNIDAD": 50, "NARANJA TANGELO MALLA X 1 5": 60, "NARANJA TANGELOX 500G": 30, "PAPAYA X 500 GR": 30, "CILANTRO MANOJO 100 G": 80, "MAZORCA BANDEJA X 2 UNIDADES": 70, "PAPAYA X 500GR": 40, "ZANAHORIA PAQUETE X 1000 G": 70};
+  function capByName(name) { return CAPS[norm(name)] || 0; }
   function capOf(ref) { return CAP[String(ref || 'MINI').split(' ')[0]] || 80; }
   var CAP = { MINI: 80, MEDIANA: 30, BULTO: 30, BULTOS: 25, COSTAL: 30 };   // cajas por estiba
   function presOf(name) {
@@ -109,7 +112,7 @@
       var nm = d.ara || d.name, ref = d.ref || refCx(nm), cx = d.cx || 0, emb = d.emb || (cx ? d.qty / cx : 0);
       if (ref === 'MINI' && norm(d.city) === 'CUCUTA') ref = 'MINI IFCO';
       if (ref === 'BULTO' && emb >= 12 && /SIN LAVAR/.test(norm(nm))) ref = 'BULTO';
-      ord[k].lines.push({ name: nm, cx: cx, qty: d.qty, emb: emb, unit: unitOf(d.unit || d.word || ''), word: d.word, ref: ref, pres: presOf(d.name + ' ' + (d.ara || '')), price: d.price || 0, prov: d.prov || '', sinCx: !cx, est: !!d.est, kg: d.kg || 0, eqOk: (d.chain === 'Éxito' || d.word === 'kilos'), cap: d.cap || 0, obs: d.chain + ' ' + d.oc + (d.est ? ' (cajas calculadas)' : '') });
+      ord[k].lines.push({ name: nm, cx: cx, qty: d.qty, emb: emb, unit: unitOf(d.unit || d.word || ''), word: d.word, ref: ref, pres: presOf(d.name + ' ' + (d.ara || '')), price: d.price || 0, prov: d.prov || '', sinCx: !cx, est: !!d.est, kg: d.kg || 0, eqOk: (d.chain === 'Éxito' || d.word === 'kilos'), cap: d.cap || capByName(nm), obs: d.chain + ' ' + d.oc + (d.est ? ' (cajas calculadas)' : '') });
     });
     // si el mismo producto viene en varias órdenes de la ciudad, va en un solo renglón (la observación dice de cuáles órdenes)
     keys.forEach(function (k) {
@@ -125,6 +128,36 @@
     });
     keys.forEach(function (k) { if (merge) ord[k].lines.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; }); });
     return keys.map(function (k) { return ord[k]; }).sort(function (a, b) { return a.city < b.city ? -1 : a.city > b.city ? 1 : (a.chain < b.chain ? -1 : 1); });
+  }
+
+  // empaque: [cubicaje, peso] por tipo de caja (los mismos valores de las hojas)
+  var PACK = { MEDIANA: [0.72, 2.0], MINI: [0.34, 1.15], A: [0.70, 0], B: [0.45, 0] };
+  function packOf(l) {
+    if (l.ref === 'MEDIANA') return 'MEDIANA';
+    if (/^MINI/.test(l.ref)) return 'MINI';
+    if (l.ref === 'BULTO' && l.emb >= 12 && /SIN LAVAR/.test(norm(l.name))) return 'B';
+    return 'A';
+  }
+  // totales de empaque como el cuadro de abajo del Excel: cajas por tipo, estibas, cubicaje y peso
+  function cubicLines(lines) {
+    var t = { cx: 0, MEDIANA: 0, MINI: 0, A: 0, B: 0, est1: 0, est2: 0, cub: 0, pesoCx: 0, qty: 0, n: 0 };
+    lines.forEach(function (l) {
+      if (l.sinCx || !(l.cx > 0)) return;
+      var k = packOf(l), cap = l.cap || capByName(l.name) || capOf(l.ref), e = l.cx / cap;
+      t.cx += l.cx; t[k] += l.cx; t.est1 += e; t.est2 += Math.ceil(e - 1e-9); t.cub += l.cx * PACK[k][0]; t.pesoCx += l.cx * PACK[k][1]; t.qty += l.qty || 0; t.n++;
+    });
+    t.total = t.qty + t.pesoCx;
+    return t;
+  }
+  // por ciudad (un renglón por producto y ciudad) y total del día
+  function cubic(rows) {
+    var by = {}, tot = { cx: 0, MEDIANA: 0, MINI: 0, A: 0, B: 0, est1: 0, est2: 0, cub: 0, pesoCx: 0, qty: 0, n: 0, total: 0 };
+    groupOrders(rows.filter(function (d) { return d.chain === 'Ara'; }), true).forEach(function (o) {
+      var c = cubicLines(o.lines), b = by[o.city] || (by[o.city] = { cx: 0, MEDIANA: 0, MINI: 0, A: 0, B: 0, est1: 0, est2: 0, cub: 0, pesoCx: 0, qty: 0, n: 0, total: 0 });
+      Object.keys(c).forEach(function (k) { b[k] += c[k]; });
+    });
+    Object.keys(by).forEach(function (k) { Object.keys(by[k]).forEach(function (f) { tot[f] += by[k][f]; }); });
+    return { by: by, tot: tot };
   }
 
   function orderSheet(wb, used, o, opt) {
@@ -166,7 +199,7 @@
         r++; gStart = r;
       }
       cnt++;
-      var cap = l.cap || capOf(l.ref), bg = cnt % 2 ? null : 'F7F9FC';
+      var cap = l.cap || capByName(l.name) || capOf(l.ref), bg = cnt % 2 ? null : 'F7F9FC';
       var st = function (al, nf, extra) { return { fill: bg, al: al || {}, nf: nf, font: extra }; };
       cell(ws, r, 1, cnt, st({ horizontal: 'center' }));
       cell(ws, r, 2, l.name, st());
@@ -185,7 +218,7 @@
       cell(ws, r, cEst1, l.sinCx ? '' : { formula: 'ROUND(' + col(cPed) + r + '/' + cap + ',2)', result: Math.round(est * 100) / 100 }, st({ horizontal: 'center' }, '0.00'));
       cell(ws, r, cEst2, l.sinCx ? '' : { formula: 'ROUNDUP(' + col(cEst1) + r + ',0)', result: Math.ceil(est - 1e-9) }, st({ horizontal: 'center' }, '0'));
       cell(ws, r, cEst2 + 1, '', st()); cell(ws, r, cEst2 + 2, [o.merged ? l.obs : '', (l.eqOk ? eqOf(l.name, l.kg || l.qty) : '') ? '= ' + eqOf(l.name, l.kg || l.qty) : ''].filter(Boolean).join(' · '), st());
-      if (!l.sinCx) { if (l.ref === 'MEDIANA') packs.MEDIANA += l.cx; else if (/^MINI/.test(l.ref)) packs.MINI += l.cx; else if (l.ref === 'BULTO' && l.emb >= 12 && /SIN LAVAR/.test(norm(l.name))) packs.B += l.cx; else packs.A += l.cx; }
+      if (!l.sinCx) packs[packOf(l)] += l.cx;
       r++;
     });
     closeGroup();
@@ -199,8 +232,8 @@
     cell(ws, tot, c['CANTIDAD'], Object.assign(sum(c['CANTIDAD']), { result: tv(0, function (l) { return l.qty; }) }), Object.assign({ al: { horizontal: 'right' }, nf: NUM }, T));
     if (pr) cell(ws, tot, c['TOTAL'], Object.assign(sum(c['TOTAL']), { result: tv(0, function (l) { return l.qty * l.price; }) }), Object.assign({ al: { horizontal: 'right' }, nf: MONEY }, T));
     cell(ws, tot, cPed, Object.assign(sum(cPed), { result: tv(0, function (l) { return l.cx; }) }), Object.assign({ al: { horizontal: 'center' }, nf: NUM }, T));
-    cell(ws, tot, cEst1, Object.assign(sum(cEst1), { result: tv(0, function (l) { return l.sinCx ? 0 : l.cx / (l.cap || capOf(l.ref)); }) }), Object.assign({ al: { horizontal: 'center' }, nf: '0.00' }, T));
-    cell(ws, tot, cEst2, Object.assign(sum(cEst2), { result: tv(0, function (l) { return l.sinCx ? 0 : Math.ceil(l.cx / (l.cap || capOf(l.ref)) - 1e-9); }) }), Object.assign({ al: { horizontal: 'center' }, nf: '0' }, T));
+    cell(ws, tot, cEst1, Object.assign(sum(cEst1), { result: tv(0, function (l) { return l.sinCx ? 0 : l.cx / (l.cap || capByName(l.name) || capOf(l.ref)); }) }), Object.assign({ al: { horizontal: 'center' }, nf: '0.00' }, T));
+    cell(ws, tot, cEst2, Object.assign(sum(cEst2), { result: tv(0, function (l) { return l.sinCx ? 0 : Math.ceil(l.cx / (l.cap || capByName(l.name) || capOf(l.ref)) - 1e-9); }) }), Object.assign({ al: { horizontal: 'center' }, nf: '0' }, T));
     var allSin = o.lines.every(function (l) { return l.sinCx; });
     if (allSin) [c['N CX'], c['EMBALAJE'], cRef, cPed, cEst1, cEst2].forEach(function (k) { ws.getColumn(k).hidden = true; });
     if (allSin) { ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }; return ws; }
@@ -208,7 +241,7 @@
     var er = tot + 3, ec = 2;
     var EH = ['EMPAQUE', 'CTD', 'CUBICAJE', 'PESO CX'];
     EH.forEach(function (h, i) { cell(ws, er, ec + i, h, { fill: 'D9E1F2', font: { bold: true, size: 9 }, al: { horizontal: 'center' } }); });
-    var items = [['CX MEDIANA', packs.MEDIANA, 0.72, 2.0], ['CX MINI', packs.MINI, 0.34, 1.15], ['BULTOS 18*20*25', packs.A, 0.70, 0], ['BULTOS *12', packs.B, 0.45, 0]];
+    var items = [['CX MEDIANA', packs.MEDIANA, PACK.MEDIANA[0], PACK.MEDIANA[1]], ['CX MINI', packs.MINI, PACK.MINI[0], PACK.MINI[1]], ['BULTOS 18*20*25', packs.A, PACK.A[0], PACK.A[1]], ['BULTOS *12', packs.B, PACK.B[0], PACK.B[1]]];
     items.forEach(function (it, i) {
       var rr = er + 1 + i;
       cell(ws, rr, ec, it[0], { font: { size: 9 } }); cell(ws, rr, ec + 1, it[1], { al: { horizontal: 'center' }, nf: NUM });
@@ -321,9 +354,9 @@
   }
   function stats(rows) {
     var cx = 0, est = 0, qty = 0;
-    rows.forEach(function (d) { var c = d.cx || 0; cx += c; qty += d.qty || 0; est += c / (d.cap || capOf(d.ref || refCx(d.ara || d.name))); });
+    rows.forEach(function (d) { var c = d.cx || 0; cx += c; qty += d.qty || 0; est += c / (d.cap || capByName(d.ara || d.name) || capOf(d.ref || refCx(d.ara || d.name))); });
     return { cx: cx, est: est, qty: qty, lines: rows.length };
   }
-  root.OlaXlsx = { groupOf: groupOf, GROUPS: GROUPS, eqOf: eqOf, build: build, refCx: refCx, groupOrders: groupOrders, lookup: lookup, capOf: capOf, stats: stats };
+  root.OlaXlsx = { groupOf: groupOf, GROUPS: GROUPS, eqOf: eqOf, build: build, refCx: refCx, groupOrders: groupOrders, lookup: lookup, capOf: capOf, capByName: capByName, cubic: cubic, cubicLines: cubicLines, PACK: PACK, stats: stats };
   if (typeof module !== 'undefined') module.exports = root.OlaXlsx;
 })(typeof window !== 'undefined' ? window : globalThis);
