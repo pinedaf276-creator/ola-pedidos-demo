@@ -1153,6 +1153,21 @@
   }
 
 
+  // resumen del día (junto al calendario, solo en pantallas anchas; sin precios)
+  function daySum(all) {
+    var rows = all.filter(function (d) { return S.hoyDate === '*' || hdate(d) === S.hoyDate; });
+    if (!rows.length) return '';
+    var ord = {}, oc = { Ara: {}, 'Éxito': {} }, prod = {}, city = {}, kg = 0, es = 0;
+    rows.forEach(function (d) { ord[d.chain + '|' + d.oc] = 1; (oc[d.chain] = oc[d.chain] || {})[d.oc] = 1; prod[d.chain + '|' + L.norm(d.name)] = 1; city[d.city] = (city[d.city] || 0) + (d.kg || 0); kg += d.kg || 0; if (d.kgq === 'es') es += d.kg || 0; });
+    var cl = Object.keys(city).sort(function (a, b) { return city[b] - city[a]; }), max = Math.max.apply(null, cl.map(function (c) { return city[c]; }).concat([1])), nA = Object.keys(oc.Ara).length, nE = Object.keys(oc['Éxito']).length;
+    var tile = function (b, l, sub) { return '<div class="dtile"><b>' + b + '</b><span>' + l + '</span>' + (sub ? '<i>' + sub + '</i>' : '') + '</div>'; };
+    return '<div class="dsum"><div class="dsh">Resumen · ' + esc(dayTxt()) + '</div><div class="dtiles">' +
+      tile(Object.keys(ord).length, 'órdenes', (nA ? '🔴 ' + nA : '') + (nA && nE ? '  ' : '') + (nE ? '🟡 ' + nE : '')) + tile(cl.length, 'destinos', '') + tile(Object.keys(prod).length, 'productos', '') + tile((es ? '≈ ' : '') + wk(kg), 'de peso', '') + '</div>' +
+      '<div class="dsh" style="margin-top:12px">Peso por destino</div>' + cl.slice(0, 7).map(function (c) {
+        var col = CITY_COL[L.norm(c).replace(/ /g, '')] || '#BFBFBF';
+        return '<div class="dbar"><span title="' + esc(c) + '">' + esc(c) + '</span><u><i style="width:' + Math.max(city[c] ? 3 : 0, city[c] / max * 100).toFixed(1) + '%;background:' + col + '"></i></u><b>' + wk(city[c]) + '</b></div>';
+      }).join('') + '</div>';
+  }
   function renderHoy() {
     var el = $('#p-hoy'), all = histDetail();
     if (!all.length) { el.innerHTML = syncBanner() + '<div class="card"><h2>Todavía no hay pedidos</h2><p class="muted">Cuando llegue un pedido a la carpeta de Drive aparece aquí solo.</p></div>'; var s0 = $('#syncNow'); if (s0) s0.onclick = function () { driveSync(true); }; return; }
@@ -1176,9 +1191,10 @@
     h += '<div class="hoyTop">' + calHtml(!bod && !consV && S.oChain ? all.filter(function (d) { return d.chain === S.oChain; }) : all, consV) +
       '<div class="card" style="padding:12px 14px"><div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:' + (ped ? '4' : '10') + 'px"><span class="muted" style="font-size:12px">Calendario por</span><div class="seg" style="margin:0"><button data-dm="ent"' + (ped ? '' : ' class="on"') + '>Fecha de entrega</button><button data-dm="ped"' + (ped ? ' class="on"' : '') + '>Fecha de pedido</button></div></div>' +
       (ped ? '<p class="muted" style="margin:0 0 10px;font-size:12px">Por el día en que se hizo el pedido. Si una orden no trae esa fecha, sale en su día de entrega.</p>' : '') +
-      '<div class="row" style="gap:10px"><button class="btn' + (consV ? ' sec' : '') + '" style="flex:1" data-hv="dest">📍 Por destino</button><button class="btn' + (consV ? '' : ' sec') + '" style="flex:1" data-hv="cons">📊 Consolidado del día</button></div></div></div>';
+      '<div class="row" style="gap:10px"><button class="btn' + (consV ? ' sec' : '') + '" style="flex:1" data-hv="dest">📍 Por destino</button><button class="btn' + (consV ? '' : ' sec') + '" style="flex:1" data-hv="cons">📊 Consolidado del día</button></div>' + daySum(all) + '</div></div>';
     if (!bod && !consV && chainsDay.length > 1) h += '<div class="row" style="gap:8px;margin:0 0 12px;align-items:center;flex-wrap:wrap"><span class="muted">Ver:</span>' + [['', 'Todos']].concat(chainsDay.map(function (c) { return [c, (c === 'Ara' ? '🔴 ' : '🟡 ') + c + ' (' + cc[c] + ')']; })).map(function (p) { return '<button class="btn' + ((S.oChain || '') === p[0] ? '' : ' sec') + ' sm" data-oc="' + esc(p[0]) + '">' + p[1] + '</button>'; }).join('') + '</div>';
-    if (bod || consV) h += '<div class="row" style="gap:10px;margin:0 0 12px">' + chainsDay.map(function (c) { var on = c === S.bChain; return '<button class="btn' + (on ? '' : ' sec') + '" style="flex:1;font-size:18px;padding:14px" data-ch="' + esc(c) + '">' + (c === 'Ara' ? '🔴 ' : '🟡 ') + esc(c) + ' <small>(' + cc[c] + ' prod.)</small></button>'; }).join('') + '</div>';
+    if (!bod && consV && chainsDay.length > 1) h += '<div class="row" style="gap:8px;margin:0 0 12px;align-items:center;flex-wrap:wrap"><span class="muted">Ver:</span>' + chainsDay.map(function (c) { return '<button class="btn' + (c === S.bChain ? '' : ' sec') + ' sm" data-ch="' + esc(c) + '">' + (c === 'Ara' ? '🔴 ' : '🟡 ') + esc(c) + ' (' + cc[c] + ' prod.)</button>'; }).join('') + '</div>';
+    if (bod) h += '<div class="row" style="gap:10px;margin:0 0 12px">' + chainsDay.map(function (c) { var on = c === S.bChain; return '<button class="btn' + (on ? '' : ' sec') + '" style="flex:1;font-size:18px;padding:14px" data-ch="' + esc(c) + '">' + (c === 'Ara' ? '🔴 ' : '🟡 ') + esc(c) + ' <small>(' + cc[c] + ' prod.)</small></button>'; }).join('') + '</div>';
     h += '<input id="hq" type="search" value="' + esc(S.hq || '') + '" placeholder="🔍 Buscar producto, orden o ciudad… (varios: tomate, papa)" style="width:100%;font-size:17px;padding:10px;box-sizing:border-box;margin:0 0 12px">';
     var unk = histOrders().filter(function (o) { return o.chain === 'Ara' && o.totalOk == null && o.declared != null; }).length;
     if (q && !base.length) h += '<div class="card"><p class="muted">Nada coincide con “' + esc(S.hq) + '” en este día.</p></div>';
