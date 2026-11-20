@@ -149,6 +149,14 @@
     t.total = t.qty + t.pesoCx;
     return t;
   }
+  // para mostrar por producto: cuántas estibas ocupa y en qué tipo de caja va (solo Ara)
+  function rowPack(d) {
+    if (d.chain !== 'Ara' || !(d.cx > 0)) return null;
+    var l = groupOrders([d], false)[0].lines[0];
+    if (!l || l.sinCx) return null;
+    var k = packOf(l), cap = l.cap || capByName(l.name) || capOf(l.ref);
+    return { est: l.cx / cap, label: k === 'MEDIANA' ? 'mediana' : k === 'MINI' ? (l.ref === 'MINI IFCO' ? 'mini IFCO' : 'mini') : l.ref === 'COSTAL' ? 'costal' : 'bulto' };
+  }
   // por ciudad (un renglón por producto y ciudad) y total del día
   function cubic(rows) {
     var by = {}, tot = { cx: 0, MEDIANA: 0, MINI: 0, A: 0, B: 0, est1: 0, est2: 0, cub: 0, pesoCx: 0, qty: 0, n: 0, total: 0 };
@@ -357,6 +365,6 @@
     rows.forEach(function (d) { var c = d.cx || 0; cx += c; qty += d.qty || 0; est += c / (d.cap || capByName(d.ara || d.name) || capOf(d.ref || refCx(d.ara || d.name))); });
     return { cx: cx, est: est, qty: qty, lines: rows.length };
   }
-  root.OlaXlsx = { groupOf: groupOf, GROUPS: GROUPS, eqOf: eqOf, build: build, refCx: refCx, groupOrders: groupOrders, lookup: lookup, capOf: capOf, capByName: capByName, cubic: cubic, cubicLines: cubicLines, PACK: PACK, stats: stats };
+  root.OlaXlsx = { groupOf: groupOf, GROUPS: GROUPS, eqOf: eqOf, build: build, refCx: refCx, groupOrders: groupOrders, lookup: lookup, capOf: capOf, capByName: capByName, cubic: cubic, rowPack: rowPack, cubicLines: cubicLines, PACK: PACK, stats: stats };
   if (typeof module !== 'undefined') module.exports = root.OlaXlsx;
 })(typeof window !== 'undefined' ? window : globalThis);

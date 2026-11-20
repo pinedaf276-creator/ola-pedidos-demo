@@ -484,12 +484,22 @@
   }
   // cubicaje (solo Ara): cajas por tipo, estibas, cubicaje y peso con empaque, como el cuadro de abajo del Excel
   function n1(x, d) { return (+x || 0).toLocaleString('es-CO', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }); }
-  function cubHtml(t, big) {
+  function cubHtml(t, titulo) {
     if (!t || !t.cx) return '';
-    var est = n1(t.est2) + ' estibas si se arma una por producto';
-    var tipos = [['Medianas', t.MEDIANA], ['Minis', t.MINI], ['Bultos 18×20×25', t.A], ['Bultos ×12', t.B]].filter(function (x) { return x[1] > 0; }).map(function (x) { return n1(x[1]) + ' ' + x[0].toLowerCase(); }).join(' · ');
-    return '<div class="cub' + (big ? ' big' : '') + '"><div class="cub-t"><b>📦 ' + n1(t.cx) + ' cajas</b><span>' + n1(t.est1, 1) + ' estibas</span><span>cubicaje ' + n1(t.cub, 1) + '</span></div>' +
-      '<div class="cub-s">' + tipos + '</div><div class="cub-s">' + est + ' · peso con empaque ' + wk(t.total) + '</div></div>';
+    var tipos = [['mediana', 'medianas', t.MEDIANA], ['mini', 'minis', t.MINI], ['bulto', 'bultos 18×20×25', t.A], ['bulto', 'bultos ×12', t.B]].filter(function (x) { return x[2] > 0; }).map(function (x) { return n1(x[2]) + ' ' + x[1]; }).join(' · ');
+    return '<div class="cub"><div class="cub-h">' + (titulo || '📦 Resumen de la carga') + '</div><div class="cub-g">' +
+      '<span>Cajas</span><b>' + n1(t.cx) + '</b><span>Estibas</span><b>' + n1(t.est1, 1) + ' <i>(' + n1(t.est2) + ' si cada producto va en su estiba)</i></b>' +
+      '<span>Cubicaje</span><b>' + n1(t.cub, 1) + '</b><span>Peso con empaque</span><b>' + wk(t.total) + '</b></div><div class="cub-s">' + tipos + '</div></div>';
+  }
+  // etiqueta por producto: estibas y tipo de caja
+  function pkChip(d) {
+    var r = O.rowPack(d); if (!r) return '';
+    return '<small class="pk">' + n1(r.est, 1) + ' estiba' + (Math.round(r.est * 10) === 10 ? '' : 's') + ' · ' + r.label + '</small>';
+  }
+  function cubDay(cu) {
+    if (!cu.tot.cx) return '';
+    var ks = Object.keys(cu.by).sort();
+    return cubHtml(cu.tot, '🚚 Carga del día · Ara') + (ks.length > 1 ? '<table class="cubtb"><tr><th>Destino</th><th>Cajas</th><th>Estibas</th><th>Cubicaje</th><th>Peso</th></tr>' + ks.map(function (k) { var t = cu.by[k]; return '<tr><td>' + esc(k) + '</td><td>' + n1(t.cx) + '</td><td>' + n1(t.est1, 1) + '</td><td>' + n1(t.cub, 1) + '</td><td>' + wk(t.total) + '</td></tr>'; }).join('') + '</table>' : '');
   }
   function checkList(c, rows) {
     var g = mergeRows(rows), GR = (O.GROUPS || []).concat(['OTROS']), by = {}, order = [];
@@ -508,7 +518,7 @@
         var d = x.d, qt = qtyTxt(d), sub = [];
         if (d.parts.length > 1) sub.push(d.parts.map(function (p) { return 'OC ' + esc(p.oc) + ': ' + esc(qtyTxt(p)); }).join(' · '));
         var who = S.hist.picked[x.ks[0]], eq = eqTxt(d), kgTxt = eq ? '<small class="eq">= ' + esc(eq) + '</small>' : (d.kg && d.chain !== 'Éxito' && !/\bkg\b|\bt$/.test(qt) ? '<small class="muted">≈ ' + wk(d.kg) + '</small>' : '');
-        h += '<label class="ck' + (x.on ? ' done' : '') + '" data-nm="' + esc(L.norm(d.name)) + '"><input type="checkbox" data-pks="' + esc(x.ks.join('¦')) + '" data-c="' + esc(c) + '"' + (x.on ? ' checked' : '') + '><span class="nm">' + esc(d.name) + (sub.length ? '<small class="muted">' + sub.join(' · ') + '</small>' : '') + (x.on && typeof who === 'string' ? '<small class="muted">✔ ' + esc(who) + '</small>' : '') + '</span><b class="q">' + esc(qt) + kgTxt + '</b></label>';
+        h += '<label class="ck' + (x.on ? ' done' : '') + '" data-nm="' + esc(L.norm(d.name)) + '"><input type="checkbox" data-pks="' + esc(x.ks.join('¦')) + '" data-c="' + esc(c) + '"' + (x.on ? ' checked' : '') + '><span class="nm">' + esc(d.name) + (sub.length ? '<small class="muted">' + sub.join(' · ') + '</small>' : '') + pkChip(d) + (x.on && typeof who === 'string' ? '<small class="muted">✔ ' + esc(who) + '</small>' : '') + '</span><b class="q">' + esc(qt) + kgTxt + '</b></label>';
       });
       h += '</details>';
     });
@@ -1011,12 +1021,11 @@
     h += '<p class="muted" style="margin:0 0 10px">' + (q ? 'Resultado de la búsqueda: ' : '') + cities.length + ' destinos · ' + Object.keys(nOrd).length + ' órdenes · ' + base.length + ' productos</p>';
     var waQt = qs.length && base.length ? waSearch(base, (S.hq || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean).join(', ')) : '';
     if (waQt) h += '<div class="card" style="padding:12px 14px"><div class="row" style="justify-content:space-between;gap:8px"><b>💬 Mensaje para WhatsApp</b><span class="muted" style="font-size:12px">por ciudad y al final el total</span></div><textarea id="waQ" readonly rows="9" style="width:100%;box-sizing:border-box;margin:8px 0;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace">' + esc(waQt) + '</textarea><div class="row" style="gap:8px"><a class="btn" id="waQb" target="_blank" rel="noopener" href="' + waLink(waQt) + '">💬 Enviar por WhatsApp</a><button class="btn sec" id="waQc">📋 Copiar mensaje</button></div></div>';
+    var cubAll = O.cubic(base);
     if (consV) {
-      h += '<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><a class="btn sec" id="cWa" target="_blank" rel="noopener">💬 WhatsApp del consolidado</a><button class="btn" id="cDl">Descargar consolidado (Excel)</button></div>' + consHtml(base, cities);
+      h += '<div class="row" style="gap:8px;margin:0 0 10px;flex-wrap:wrap"><a class="btn sec" id="cWa" target="_blank" rel="noopener">💬 WhatsApp del consolidado</a><button class="btn" id="cDl">Descargar consolidado (Excel)</button></div>' + consHtml(base, cities) + (S.bChain === 'Ara' ? cubDay(cubAll) : '');
       cities = [];
     }
-    var cubAll = O.cubic(base);
-    if (cities.length > 1 && cubAll.tot.cx) h += '<details class="card cubday" style="padding:10px 14px;margin:0 0 12px"><summary><b>🚚 Carga del día · Ara</b> <span class="muted">' + n1(cubAll.tot.cx) + ' cajas · ' + n1(cubAll.tot.est1, 1) + ' estibas · cubicaje ' + n1(cubAll.tot.cub, 1) + '</span></summary>' + cubHtml(cubAll.tot, true) + '<table class="cubtb"><tr><th>Destino</th><th>Cajas</th><th>Estibas</th><th>Cubicaje</th><th>Peso</th></tr>' + Object.keys(cubAll.by).sort().map(function (k) { var t = cubAll.by[k]; return '<tr><td>' + esc(k) + '</td><td>' + n1(t.cx) + '</td><td>' + n1(t.est1, 1) + '</td><td>' + n1(t.cub, 1) + '</td><td>' + wk(t.total) + '</td></tr>'; }).join('') + '</table></details>';
     h += '<div class="ccards">';
     cities.forEach(function (c) {
       var rows = base.filter(function (d) { return d.city === c; }), st = O.stats(rows), key = (S.dateMode === 'ped' ? 'P' : '') + S.hoyDate + '|' + c + (bod ? '|' + S.bChain : ''), sv = S.hist.status[key] || 'nuevo', kg = 0, ch = {};
@@ -1025,9 +1034,9 @@
       var isOpen = S.openList === c || q;
       h += '<div class="card ccard' + (isOpen ? ' open' : '') + '" data-card="' + esc(c) + '" style="margin:0;padding:12px 14px;border-top:6px solid ' + col + '"><div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">' + esc(c) + '</h3><button class="btn sec sm" data-st="' + esc(key) + '">' + STAT_T[sv] + '</button></div>' +
         '<div style="margin:6px 0;line-height:1.5">' + Object.keys(ch).map(function (k) { return '<span class="cb ' + esc(k) + '">' + esc(k) + '</span> <span class="muted" style="font-size:12px">' + Object.keys(ch[k]).map(function (o) { return srcLink(k, o, c); }).join(' · ') + '</span>'; }).join('<br>') + '</div>' +
-        progHtml(c, rows) + cubHtml(cubAll.by[c]) +
+        progHtml(c, rows) +
         '<div class="row" style="gap:8px;margin:0 0 8px;flex-wrap:wrap"><button class="btn' + (isOpen ? '' : ' sec') + ' sm" data-ls="' + esc(c) + '">' + (isOpen ? '▴ Cerrar lista' : '☑ Abrir lista') + '</button><a class="btn sec sm" target="_blank" rel="noopener" href="' + waLink(waCity(c, (qs.length ? base : baseAll).filter(function (d) { return d.city === c; }))) + '">💬 WhatsApp</a></div>' +
-        (isOpen ? checkList(c, rows) : '') +
+        (isOpen ? checkList(c, rows) + cubHtml(cubAll.by[c]) : '') +
         '<div class="row" style="justify-content:space-between;align-items:center;gap:8px"><button class="btn sm" data-dl="' + esc(c) + '">Descargar Excel</button>' + (kg ? '<span class="muted" style="font-size:12px;white-space:nowrap">' + wk(kg) + '</span>' : '') + '</div></div>';
     });
     h += '</div>';
