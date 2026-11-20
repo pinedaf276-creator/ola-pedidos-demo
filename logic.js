@@ -4,7 +4,7 @@
   var KNOWN = {
     BARRANQUILLA: 'Barranquilla', MONTERIA: 'Montería', VALLEDUPAR: 'Valledupar', CARTAGENA: 'Cartagena',
     MEDELLIN: 'Medellín', CUCUTA: 'Cúcuta', BOGOTA: 'Bogotá', CALI: 'Cali', BUCARAMANGA: 'Bucaramanga',
-    PEREIRA: 'Pereira', COTA: 'Cota', GACHANCIPA: 'Gachancipá', 'SATELITE R7': 'Satélite R7', 'SANTA MARTA': 'Santa Marta', SINCELEJO: 'Sincelejo', 'VILLAVICENCIO': 'Villavicencio'
+    PEREIRA: 'Pereira', COTA: 'Cota', GACHANCIPA: 'Gachancipá', 'SATELITE R7': 'Satélite R7 (Bogotá)', 'SATELITE R7 BOGOTA': 'Satélite R7 (Bogotá)', 'SANTA MARTA': 'Santa Marta', SINCELEJO: 'Sincelejo', 'VILLAVICENCIO': 'Villavicencio'
   };
 
   function norm(s) {

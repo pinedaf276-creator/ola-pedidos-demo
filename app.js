@@ -50,7 +50,7 @@
     });
     return { orders: out, removed: n };
   }
-  function normHist(h) { h = h ? JSON.parse(JSON.stringify(h)) : {}; var d = dedupOrders(h.orders || {}); return { orders: d.orders, seen: h.seen || {}, boxes: h.boxes || {}, status: h.status || {}, picked: h.picked || {}, disp: h.disp || {}, costs: h.costs || {}, users: h.users || {}, ver: h.ver || 0, dedup: d.removed }; }
+  function normHist(h) { h = h ? JSON.parse(JSON.stringify(h)) : {}; if (JSON.stringify(h).indexOf('Satélite R7') >= 0) h = JSON.parse(JSON.stringify(h).replace(/Satélite R7(?! \(Bogotá\))/g, 'Satélite R7 (Bogotá)')); var d = dedupOrders(h.orders || {}); return { orders: d.orders, seen: h.seen || {}, boxes: h.boxes || {}, status: h.status || {}, picked: h.picked || {}, disp: h.disp || {}, costs: h.costs || {}, users: h.users || {}, ver: h.ver || 0, dedup: d.removed }; }
   function findOrderKey(f) { var g = (f.chain || '') + '|' + (f.oc || f.name || ''), ks = Object.keys(S.hist.orders); for (var i = 0; i < ks.length; i++) if (ordGroup(S.hist.orders[ks[i]]) === g) return ks[i]; return null; }
   var hTimer = null, hSaving = Promise.resolve();
   function saveHist() {
@@ -137,7 +137,7 @@
   async function sha(t) { try { var b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return Array.from(new Uint8Array(b)).map(function (x) { return x.toString(16).padStart(2, '0'); }).join(''); } catch (e) { return 'x:' + t; } }
   function renderLocked(elId, again, title, msg) {
     var el = $(elId || '#p-ledger'); again = again || renderLedger;
-    el.innerHTML = '<div class="card lock"><div style="font-size:42px">🔒</div><h2>' + (title || 'Cuentas privadas') + '</h2><p class="muted">' + (msg || 'Aquí están los valores en pesos. Escribe la clave para verlos.') + '</p><input type="password" id="pw" placeholder="Clave" autocomplete="off"><div id="pwerr" class="muted" style="color:var(--badtx);min-height:18px"></div><button class="btn" id="pwgo">Entrar</button></div>';
+    el.innerHTML = '<div class="card lock"><div style="font-size:42px">🔒</div><h2>' + (title || 'Precios y costos (privado)') + '</h2><p class="muted">' + (msg || 'Aquí están los valores en pesos. Escribe la clave para verlos.') + '</p><input type="password" id="pw" placeholder="Clave" autocomplete="off"><div id="pwerr" class="muted" style="color:var(--badtx);min-height:18px"></div><button class="btn" id="pwgo">Entrar</button></div>';
     var go = async function () {
       var v = $('#pw').value, okp = (await sha(v)) === PASS_HASH || ('x:' + v) === PASS_HASH;
       if (okp) { S.unlocked = true; again(); } else { $('#pwerr').textContent = 'Clave incorrecta'; $('#pw').value = ''; }
@@ -145,16 +145,127 @@
     addEye($('#pw')); $('#pwgo').onclick = go; $('#pw').onkeydown = function (e) { if (e.key === 'Enter') go(); }; $('#pw').focus();
   }
   // ---- cuentas: ventas por producto, comparación de meses y ganancia (privado)
-  S.lg = S.lg || { tab: 'ord', gran: 'month', rng: 'all' };
+  S.lg = S.lg || { tab: 'pre', gran: 'month', rng: 'all' };
   function pkey(d) { return d.chain + '|' + L.norm(d.name); }
   function monthsOf(rows) { var o = {}; rows.forEach(function (d) { var i = dIso(d.date); if (i) o[i.slice(0, 7)] = 1; }); return Object.keys(o).sort(); }
   function inMonth(rows, m) { return rows.filter(function (d) { var i = dIso(d.date); return i && i.slice(0, 7) === m; }); }
   function pct(a, b) { if (!b) return a ? '<span class="muted">nuevo</span>' : '–'; var p = Math.round((a - b) / Math.abs(b) * 100); return '<b style="color:' + (p >= 0 ? '#1a7f37' : '#c62828') + '">' + (p >= 0 ? '▲ ' : '▼ ') + Math.abs(p) + '%</b>'; }
   function prodSum(rows) { var P = {}; rows.forEach(function (d) { var k = pkey(d), p = P[k] = P[k] || { name: d.name, chain: d.chain, v: 0, q: 0, w: d.word }; p.v += d.val || d.qty * d.price; p.q += d.qty; }); return P; }
+  // ---- panorama de precios y costos (privado): gráficos y porcentajes
+  function mm(v) { v = Math.round(+v || 0); var a = Math.abs(v); if (a >= 1e6) return (v < 0 ? '-' : '') + '$ ' + (a / 1e6).toFixed(a >= 1e8 ? 0 : 1).replace('.', ',') + ' M'; if (a >= 1e4) return (v < 0 ? '-' : '') + '$ ' + Math.round(a / 1e3) + ' mil'; return cop(v); }
+  function pcVar(a, b) { if (!b) return ''; var p = (a - b) / Math.abs(b) * 100; return '<span style="font-size:12px;font-weight:700;color:' + (p >= 0 ? '#1a7f37' : '#c62828') + '">' + (p >= 0 ? '▲ ' : '▼ ') + Math.abs(p).toFixed(Math.abs(p) < 10 ? 1 : 0).replace('.', ',') + '%</span>'; }
+  var PRE_PAL = ['#1F3864', '#ed3237', '#f2a900', '#2e8b57', '#6a5acd', '#e07b39', '#2a9d8f', '#8d6e63'];
+  function pcDonut(items, centerTop, centerSub) {
+    var tot = items.reduce(function (a, i) { return a + i.v; }, 0) || 1, R = 52, SW = 26, C = 2 * Math.PI * R, off = 0;
+    var svg = '<svg viewBox="0 0 160 160" width="170" height="170" style="flex:0 0 auto"><g transform="rotate(-90 80 80)"><circle cx="80" cy="80" r="' + R + '" fill="none" stroke="#eef1f7" stroke-width="' + SW + '"/>';
+    items.forEach(function (i) { var len = i.v / tot * C; svg += '<circle cx="80" cy="80" r="' + R + '" fill="none" stroke="' + i.c + '" stroke-width="' + SW + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '"><title>' + esc(i.l) + ': ' + mm(i.v) + ' (' + Math.round(i.v / tot * 100) + '%)</title></circle>'; off += len; });
+    svg += '</g><text x="80" y="78" text-anchor="middle" font-size="17" font-weight="800" fill="#1F3864">' + esc(centerTop) + '</text><text x="80" y="94" text-anchor="middle" font-size="10" fill="#778">' + esc(centerSub) + '</text></svg>';
+    var leg = '<div style="flex:1 1 180px;min-width:0">' + items.map(function (i) { return '<div style="display:flex;align-items:center;gap:7px;padding:3px 0;font-size:13px"><span style="width:11px;height:11px;border-radius:3px;background:' + i.c + ';flex:0 0 auto"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(i.l) + '</span><b style="color:#1F3864">' + Math.round(i.v / tot * 100) + '%</b><span class="muted" style="font-size:12px;min-width:62px;text-align:right">' + mm(i.v) + '</span></div>'; }).join('') + '</div>';
+    return '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px">' + svg + leg + '</div>';
+  }
+  // barras horizontales: {l, v, c, t (texto a la derecha)}
+  function pcBars(items, fmtv) {
+    var max = Math.max.apply(null, items.map(function (i) { return i.v; }).concat([1])), tot = items.reduce(function (a, i) { return a + i.v; }, 0) || 1;
+    return '<div>' + items.map(function (i) { return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0;font-size:13px"><span style="flex:0 0 112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">' + esc(i.l) + '</span><span style="flex:1;background:#eef1f7;border-radius:6px;height:20px;position:relative"><i style="display:block;height:100%;width:' + Math.max(2, i.v / max * 100).toFixed(1) + '%;background:' + i.c + ';border-radius:6px"></i></span><b style="flex:0 0 auto;min-width:88px;text-align:right;color:#1F3864">' + (i.t != null ? i.t : mm(i.v) + ' <span class="muted" style="font-weight:600">· ' + Math.round(i.v / tot * 100) + '%</span>') + '</b></div>'; }).join('') + '</div>';
+  }
+  function pcCols(bk) {
+    var W = 360, H = 190, L0 = 6, B0 = 24, T0 = 20, n = bk.length || 1, max = Math.max.apply(null, bk.map(function (b) { return b.v; }).concat([1])), step = (W - L0 - 4) / n, bw = Math.min(40, step * 0.72), every = Math.ceil(n / 10);
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:760px;display:block;margin:auto">';
+    bk.forEach(function (b, i) {
+      var h = b.v / max * (H - B0 - T0), x = L0 + i * step + (step - bw) / 2, y = H - B0 - h;
+      svg += '<g><title>' + esc(b.l) + ': ' + mm(b.v) + '</title><rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) + '" rx="3" fill="' + (i === bk.length - 1 ? '#ed3237' : '#1F3864') + '"/>' +
+        (step >= 20 || i % every === 0 ? '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" text-anchor="middle" font-size="9" font-weight="700" fill="#1F3864">' + mm(b.v).replace('$ ', '') + '</text>' : '') +
+        (i % every === 0 ? '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="9.5" fill="#556">' + esc(b.l) + '</text>' : '') + '</g>';
+    });
+    return svg + '</svg>';
+  }
+  // línea de precio de un producto: pts = [{d: 'AAAA-MM-DD', p: precio}]
+  function pcLine(pts) {
+    var W = 360, H = 190, L0 = 46, R0 = 14, B0 = 24, T0 = 20, n = pts.length;
+    if (!n) return '';
+    var ps = pts.map(function (p) { return p.p; }), mn = Math.min.apply(null, ps), mx = Math.max.apply(null, ps), pad = (mx - mn) * 0.2 || mx * 0.1 || 1, lo = Math.max(0, mn - pad), hi = mx + pad;
+    var t0 = fromIso(pts[0].d).getTime(), t1 = fromIso(pts[n - 1].d).getTime(), span = Math.max(1, t1 - t0);
+    var px = function (p) { return n === 1 ? (L0 + W - R0) / 2 : L0 + (fromIso(p.d).getTime() - t0) / span * (W - L0 - R0); }, py = function (v) { return T0 + (H - B0 - T0) * (1 - (v - lo) / (hi - lo)); };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:760px;display:block;margin:auto">';
+    [0, 0.5, 1].forEach(function (f) { var v = lo + (hi - lo) * f, y = py(v); svg += '<line x1="' + L0 + '" x2="' + (W - R0) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '" stroke="#e8ebf2"/><text x="' + (L0 - 5) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" font-size="9.5" fill="#778">' + fmt(Math.round(v)) + '</text>'; });
+    if (n > 1) svg += '<polygon points="' + px(pts[0]).toFixed(1) + ',' + (H - B0) + ' ' + pts.map(function (p) { return px(p).toFixed(1) + ',' + py(p.p).toFixed(1); }).join(' ') + ' ' + px(pts[n - 1]).toFixed(1) + ',' + (H - B0) + '" fill="rgba(31,56,100,.08)"/><polyline points="' + pts.map(function (p) { return px(p).toFixed(1) + ',' + py(p.p).toFixed(1); }).join(' ') + '" fill="none" stroke="#1F3864" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>';
+    var imin = ps.indexOf(mn), imax = ps.indexOf(mx);
+    pts.forEach(function (p, i) {
+      var x = px(p), y = py(p.p), key = i === 0 || i === n - 1 || i === imin || i === imax, col = i === imax && mx !== mn ? '#c62828' : i === imin && mx !== mn ? '#1a7f37' : '#1F3864';
+      svg += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (key ? 4.2 : 3) + '" fill="' + col + '" stroke="#fff" stroke-width="1.2"><title>' + shortD(p.d) + ': ' + cop(p.p) + '</title></circle>';
+      if (key || n <= 8) svg += '<text x="' + x.toFixed(1) + '" y="' + (y - 8).toFixed(1) + '" text-anchor="middle" font-size="9.5" font-weight="700" fill="' + col + '">' + fmt(Math.round(p.p)) + '</text>';
+      if (n <= 8 || i === 0 || i === n - 1 || i % Math.ceil(n / 6) === 0) svg += '<text x="' + x.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="9.5" fill="#556">' + shortD(p.d) + '</text>';
+    });
+    return svg + '</svg>';
+  }
+  function preHtml(det, MS) {
+    var g = S.lg, cs = S.hist.costs || {}, chain = g.pch || 'Ara', pm = g.pm && MS.indexOf(g.pm) >= 0 ? g.pm : 'all';
+    var rowsC = det.filter(function (d) { return chain === 'Ambas' || d.chain === chain; }), rows = pm === 'all' ? rowsC : inMonth(rowsC, pm);
+    var pmi = MS.indexOf(pm), prevRows = pm !== 'all' && pmi > 0 ? inMonth(rowsC, MS[pmi - 1]) : [];
+    var val = function (d) { return d.val || d.qty * d.price; }, sum = function (rr) { return rr.reduce(function (a, d) { return a + val(d); }, 0); };
+    var top = '<div class="stcard"><div class="stlab">Cadena</div><div style="display:flex;flex-wrap:wrap;margin-bottom:8px">' + [['Ara', '🔴 Ara'], ['Éxito', '🟡 Éxito'], ['Ambas', 'Ambas']].map(function (c) { return '<button class="chp' + (chain === c[0] ? ' on' : '') + '" data-pch="' + c[0] + '">' + c[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="stlab">Período (por fecha de entrega)</div><div style="display:flex;flex-wrap:wrap"><button class="chp' + (pm === 'all' ? ' on' : '') + '" data-ppm="all">Todo</button>' + MS.map(function (m) { return '<button class="chp' + (pm === m ? ' on' : '') + '" data-ppm="' + m + '">' + mLab(m) + '</button>'; }).join('') + '</div>' +
+      (chain === 'Ara' ? '<p class="muted" style="margin:8px 0 0;font-size:12px">Ara es la cadena con precios verificados contra el total del PDF. Éxito también trae un precio por kilo; míralo con el botón «Éxito».</p>' : '') + '</div>';
+    if (!rows.length) return top + '<div class="stcard"><p class="muted">No hay pedidos de ' + (chain === 'Ambas' ? 'ninguna cadena' : esc(chain)) + ' en este período.</p></div>';
+    var tv = sum(rows), ords = {}, kgT = 0, vkg = 0, P = {}, C = {};
+    rows.forEach(function (d) {
+      ords[d.chain + d.oc] = 1; if (d.kg > 0) { kgT += d.kg; vkg += val(d); }
+      var k = pkey(d), p = P[k] = P[k] || { k: k, name: d.name, chain: d.chain, v: 0, q: 0, dt: {}, w: d.word, cost: cs[k] };
+      p.v += val(d); p.q += d.qty; var i = dIso(d.date); if (i) { var x = p.dt[i] = p.dt[i] || { v: 0, q: 0 }; x.v += val(d); x.q += d.qty; }
+      C[d.city] = (C[d.city] || 0) + val(d);
+    });
+    var nOrd = Object.keys(ords).length, prods = Object.keys(P).map(function (k) { return P[k]; }).sort(function (a, b) { return b.v - a.v; });
+    // costo cargado → margen
+    var cv = 0, cc = 0; rows.forEach(function (d) { var c = cs[pkey(d)]; if (c != null && c !== '') { cv += val(d); cc += +c * d.qty; } });
+    var mg = cv ? (cv - cc) / cv * 100 : null;
+    var kp = function (b, s, extra) { return '<div class="kpi"><b>' + b + '</b><span>' + s + '</span>' + (extra ? '<div>' + extra + '</div>' : '') + '</div>'; };
+    var h = top + '<div class="hero">' + kp(mm(tv), 'ventas sin IVA', pcVar(tv, sum(prevRows)) + (prevRows.length ? ' <span class="muted" style="font-size:11px">vs mes anterior</span>' : '')) + kp(fmt(nOrd), 'órdenes', '<span class="muted" style="font-size:11px">' + mm(tv / (nOrd || 1)) + ' por orden</span>') +
+      kp(kgT ? cop(vkg / kgT) : '–', 'precio medio por kg', '<span class="muted" style="font-size:11px">de lo vendido en kilos</span>') + kp(mg == null ? '–' : mg.toFixed(1).replace('.', ',') + '%', 'margen', '<span class="muted" style="font-size:11px">' + (mg == null ? 'falta cargar costos' : 'sobre ' + mm(cv) + ' con costo') + '</span>') + '</div>';
+    // 1. de dónde viene la plata
+    var topP = prods.slice(0, 7), rest = prods.slice(7).reduce(function (a, p) { return a + p.v; }, 0), dn = topP.map(function (p, i) { return { l: p.name, v: p.v, c: PRE_PAL[i % 8] }; });
+    if (rest > 0) dn.push({ l: 'Otros (' + (prods.length - 7) + ')', v: rest, c: '#c3c9d6' });
+    h += '<div class="stcard"><h3 style="margin:0 0 2px;color:#1F3864">¿De qué productos viene la plata?</h3><p class="muted" style="margin:0 0 8px;font-size:12px">Parte de las ventas de cada producto (' + prods.length + ' en total).</p>' + pcDonut(dn, mm(tv), 'ventas') + '</div>';
+    // 2. ciudades
+    var cl = Object.keys(C).sort(function (a, b) { return C[b] - C[a]; });
+    h += '<div class="stcard"><h3 style="margin:0 0 6px;color:#1F3864">Ventas por destino</h3>' + pcBars(cl.map(function (c, i) { return { l: c, v: C[c], c: CITY_COL[L.norm(c).replace(/ /g, '')] || PRE_PAL[i % 8] }; })) + '</div>';
+    // 3. en el tiempo
+    var byM = pm === 'all' && MS.length > 2, B = {};
+    rows.forEach(function (d) { var i = dIso(d.date); if (!i) return; var k = byM ? i.slice(0, 7) : monOf(i); B[k] = (B[k] || 0) + val(d); });
+    var bk = Object.keys(B).sort().map(function (k) { return { l: byM ? mLab(k).slice(0, 3) : shortD(k), v: B[k] }; });
+    if (bk.length > 1) h += '<div class="stcard"><h3 style="margin:0 0 2px;color:#1F3864">Ventas ' + (byM ? 'por mes' : 'por semana') + '</h3><p class="muted" style="margin:0 0 6px;font-size:12px">' + (byM ? '' : 'Semana que empieza el lunes. ') + 'La barra roja es la más reciente. Pasa el dedo o el mouse para ver el valor.</p>' + pcCols(bk) + '</div>';
+    // 4. quién subió y quién bajó de precio
+    var mv = []; prods.forEach(function (p) { var ds = Object.keys(p.dt).sort(); if (ds.length < 2) return; var a = p.dt[ds[0]], z = p.dt[ds[ds.length - 1]], pa = a.v / a.q, pz = z.v / z.q; if (!pa) return; mv.push({ p: p, a: pa, z: pz, ch: (pz - pa) / pa * 100 }); });
+    var ups = mv.filter(function (m) { return m.ch > 0.4; }).sort(function (x, y) { return y.ch - x.ch; }).slice(0, 6), dns = mv.filter(function (m) { return m.ch < -0.4; }).sort(function (x, y) { return x.ch - y.ch; }).slice(0, 6), flat = mv.filter(function (m) { return Math.abs(m.ch) <= 0.4; }).length;
+    var mvRow = function (m) { var up = m.ch > 0; return { l: m.p.name, v: Math.abs(m.ch), c: up ? '#c62828' : '#2e8b57', t: (up ? '▲ ' : '▼ ') + Math.abs(m.ch).toFixed(1).replace('.', ',') + '% <span class="muted" style="font-weight:500;font-size:11px">' + fmt(Math.round(m.a)) + ' → ' + fmt(Math.round(m.z)) + '</span>' }; };
+    h += '<div class="stcard"><h3 style="margin:0 0 2px;color:#1F3864">Precios: quién subió y quién bajó</h3><p class="muted" style="margin:0 0 8px;font-size:12px">Compara el primer precio con el último del período (precio por unidad). Rojo = subió, verde = bajó.</p>' +
+      (ups.length ? '<div class="stlab">▲ Subieron</div>' + pcBars(ups.map(mvRow)) : '') + (dns.length ? '<div class="stlab" style="margin-top:10px">▼ Bajaron</div>' + pcBars(dns.map(mvRow)) : '') +
+      (!ups.length && !dns.length ? '<p class="muted">Todavía no hay productos con precios en dos fechas distintas para comparar.</p>' : '') + (flat ? '<p class="muted" style="margin:8px 0 0;font-size:12px">' + flat + ' producto(s) sin cambio de precio.</p>' : '') + '</div>';
+    // 5. precio de un producto en el tiempo
+    var cand = prods.filter(function (p) { return Object.keys(p.dt).length >= 2; }), sel = g.pp && P[g.pp] ? P[g.pp] : (cand[0] || prods[0]);
+    if (sel) {
+      var ds = Object.keys(sel.dt).sort(), pts = ds.map(function (i) { return { d: i, p: sel.dt[i].v / sel.dt[i].q }; }), ps = pts.map(function (x) { return x.p; }), first = ps[0], last = ps[ps.length - 1], mn = Math.min.apply(null, ps), mx = Math.max.apply(null, ps), avg = sel.v / (sel.q || 1);
+      var cities = {}; rows.forEach(function (d) { if (pkey(d) === sel.k) { var c = cities[d.city] = cities[d.city] || { v: 0, q: 0 }; c.v += val(d); c.q += d.qty; } });
+      var big = function (v, l, col) { return '<div style="flex:1 1 90px;background:#f6f8fc;border-radius:10px;padding:8px 10px;border-top:3px solid ' + (col || '#1F3864') + '"><div style="font-size:17px;font-weight:800;color:#1F3864;line-height:1.1">' + v + '</div><div class="muted" style="font-size:11px">' + l + '</div></div>'; };
+      h += '<div class="stcard"><h3 style="margin:0 0 6px;color:#1F3864">💲 Precio de un producto en el tiempo</h3><div style="display:flex;flex-wrap:wrap;margin-bottom:6px">' + (cand.length ? cand : prods).slice(0, 6).map(function (p) { return '<button class="chp' + (p.k === sel.k ? ' on' : '') + '" data-ppr="' + esc(p.k) + '">' + esc(stTrunc(p.name, 20)) + '</button>'; }).join('') + '</div>' +
+        '<select id="preProd" style="width:100%;font-size:16px;padding:8px;margin-bottom:10px;box-sizing:border-box">' + prods.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }); }).map(function (p) { return '<option value="' + esc(p.k) + '"' + (p.k === sel.k ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('') + '</select>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' + big(cop(last), 'último precio' + (sel.w ? ' / ' + esc(sel.w) : '')) + big(pts.length > 1 ? pcVar(last, first) : '–', 'frente al primero (' + cop(first) + ')', last >= first ? '#c62828' : '#2e8b57') + big(cop(mn), 'más bajo', '#2e8b57') + big(cop(mx), 'más alto', '#c62828') + big(cop(avg), 'promedio') + '</div>' + pcLine(pts) +
+        (Object.keys(cities).length > 1 ? '<h4 style="margin:12px 0 4px;color:#1F3864;font-size:14px">Precio promedio por destino</h4>' + pcBars(Object.keys(cities).sort(function (a, b) { return cities[b].v / cities[b].q - cities[a].v / cities[a].q; }).map(function (c, i) { return { l: c, v: cities[c].v / cities[c].q, c: CITY_COL[L.norm(c).replace(/ /g, '')] || PRE_PAL[i % 8], t: cop(cities[c].v / cities[c].q) }; })) : '') +
+        (sel.cost != null && sel.cost !== '' ? '<p style="margin:10px 0 0;font-size:13px">Tu costo: <b>' + cop(sel.cost) + '</b> → margen sobre el último precio: <b style="color:' + (last >= sel.cost ? '#1a7f37' : '#c62828') + '">' + ((last - sel.cost) / last * 100).toFixed(1).replace('.', ',') + '%</b></p>' : '<p class="muted" style="margin:10px 0 0;font-size:12px">Escribe el costo de este producto en la pestaña «Ganancia» y aquí sale su margen.</p>') + '</div>';
+    }
+    // 6. margen por producto
+    var wc = prods.filter(function (p) { return p.cost != null && p.cost !== '' && p.q; }).map(function (p) { var pr = p.v / p.q; return { p: p, pr: pr, m: (pr - p.cost) / pr * 100, gan: p.v - p.cost * p.q }; }).sort(function (a, b) { return b.m - a.m; });
+    if (wc.length) {
+      h += '<div class="stcard"><h3 style="margin:0 0 2px;color:#1F3864">Margen por producto</h3><p class="muted" style="margin:0 0 8px;font-size:12px">(precio − costo) ÷ precio. Solo productos con costo cargado (' + wc.length + ' de ' + prods.length + ').</p>' +
+        pcBars(wc.map(function (w) { return { l: w.p.name, v: Math.max(0, w.m), c: w.m >= 20 ? '#2e8b57' : w.m >= 8 ? '#f2a900' : '#c62828', t: w.m.toFixed(1).replace('.', ',') + '% <span class="muted" style="font-weight:500;font-size:11px">' + mm(w.gan) + '</span>' }; })) + '</div>';
+    } else h += '<div class="stcard" style="border-left:5px solid #f2a900"><h3 style="margin:0 0 4px;color:#1F3864">📉 Margen y costos</h3><p class="muted" style="margin:0 0 8px">Todavía no hay costos cargados. Escribe lo que te cuesta cada producto (por unidad) y aquí aparecen el margen por producto y la ganancia.</p><button class="btn" data-lt="gan">Cargar costos</button></div>';
+    return h;
+  }
   function ledgerPro(det) {
     var g = S.lg, MS = monthsOf(det), h = '', cs = S.hist.costs = S.hist.costs || {};
-    var tabs = '<div style="overflow-x:auto;margin:6px 0">' + segBtns([['ord', '🧾 Órdenes'], ['ven', '💰 Ventas por producto'], ['gan', '📈 Ganancia']], g.tab, 'data-lt') + '</div>';
-    if (g.tab === 'ven') {
+    var tabs = '<div style="overflow-x:auto;margin:6px 0">' + segBtns([['pre', '📊 Resumen visual'], ['ord', '🧾 Órdenes'], ['ven', '💰 Ventas por producto'], ['gan', '📈 Ganancia']], g.tab, 'data-lt') + '</div>';
+    if (g.tab === 'pre') {
+      h += tabs + preHtml(det, MS);
+    } else if (g.tab === 'ven') {
       var mA = g.mA && MS.indexOf(g.mA) >= 0 ? g.mA : MS[MS.length - 1], mB = g.mB && MS.indexOf(g.mB) >= 0 ? g.mB : (MS.length > 1 ? MS[MS.length - 2] : MS[0]), PA = prodSum(inMonth(det, mA)), PB = prodSum(inMonth(det, mB)), ks = {};
       Object.keys(PA).concat(Object.keys(PB)).forEach(function (k) { ks[k] = 1; });
       var list = Object.keys(ks).map(function (k) { var a = PA[k], b = PB[k]; return { k: k, name: (a || b).name, chain: (a || b).chain, a: a ? a.v : 0, b: b ? b.v : 0, qa: a ? a.q : 0, w: (a || b).w }; }).sort(function (x, y) { return Math.max(y.a, y.b) - Math.max(x.a, x.b); });
@@ -192,6 +303,10 @@
     var g = S.lg, go = function () { renderLedger(); };
     el.querySelectorAll('[data-lt]').forEach(function (b) { b.onclick = function () { g.tab = b.dataset.lt; go(); }; });
     el.querySelectorAll('[data-lg]').forEach(function (b) { b.onclick = function () { g.gran = b.dataset.lg; go(); }; });
+    el.querySelectorAll('[data-pch]').forEach(function (b) { b.onclick = function () { g.pch = b.dataset.pch; go(); }; });
+    el.querySelectorAll('[data-ppm]').forEach(function (b) { b.onclick = function () { g.pm = b.dataset.ppm; go(); }; });
+    el.querySelectorAll('[data-ppr]').forEach(function (b) { b.onclick = function () { g.pp = b.dataset.ppr; go(); }; });
+    var sp = $('#preProd'); if (sp) sp.onchange = function () { g.pp = this.value; go(); };
     el.querySelectorAll('[data-lr]').forEach(function (b) { b.onclick = function () { g.rng = b.dataset.lr; go(); }; });
     var a = $('#lgA'), b = $('#lgB'); if (a) a.onchange = function () { g.mA = this.value; go(); }; if (b) b.onchange = function () { g.mB = this.value; go(); };
     el.querySelectorAll('[data-cost]').forEach(function (i) { i.onchange = function () { var v = this.value; if (v === '') delete S.hist.costs[i.dataset.cost]; else S.hist.costs[i.dataset.cost] = +v; saveHist(); go(); }; });
@@ -199,7 +314,7 @@
   function renderLedger() {
     if (!S.unlocked) { renderLocked(); return; }
     var el = $('#p-ledger'), ords = histOrders(), det = histDetail(), h = '';
-    if (!ords.length) { el.innerHTML = '<div class="card"><h2>Cuentas</h2><p class="muted">Aquí se van guardando solas todas las órdenes que leas (fecha, OC, ciudad, cajas y valor). Todavía no hay ninguna.</p></div>'; return; }
+    if (!ords.length) { el.innerHTML = '<div class="card"><h2>Precios y costos</h2><p class="muted">Aquí se van guardando solas todas las órdenes que leas (fecha, OC, ciudad, cajas y valor). Todavía no hay ninguna.</p></div>'; return; }
     var tcx = 0, tval = 0; det.forEach(function (d) { tcx += d.cx; tval += d.qty * d.price; });
     stStyle(); var lp = ledgerPro(det), onlyOrd = S.lg.tab === 'ord';
     h += '<div class="hero"><div class="kpi"><b>' + ords.length + '</b><span>órdenes guardadas</span></div><div class="kpi"><b>' + fmt(tcx) + '</b><span>cajas en total</span></div><div class="kpi"><b>' + cop(tval) + '</b><span>valor neto sin IVA</span></div></div>';
@@ -1673,7 +1788,7 @@
     { g: 'dat', n: 'Datos', ic: '📊', t: ['stats', 'ledger'] },
     { g: 'mas', n: 'Más', ic: '⋯', t: ['exp', 'users'] }
   ];
-  var NAV_LAB = { hoy: '🏠 Hoy', tbl: '📋 Detalle', load: '＋ Agregar a mano', des: 'Despacho', rec: 'Recibido', stats: '📈 Estadísticas', ledger: '🔒 Cuentas', exp: '📥 Exportar Excel', users: '👥 Usuarios' };
+  var NAV_LAB = { hoy: '🏠 Hoy', tbl: '📋 Detalle', load: '＋ Agregar a mano', des: 'Despacho', rec: 'Recibido', stats: '📈 Estadísticas', ledger: '🔒 Precios y costos', exp: '📥 Exportar Excel', users: '👥 Usuarios' };
   S.gLast = {};
   function navGroupOf(t) { for (var i = 0; i < NAVG.length; i++) if (NAVG[i].t.indexOf(t) >= 0) return NAVG[i]; return null; }
   function navOk() { return S.user ? (ROLE_TABS[S.user.role] || ['hoy']) : []; }
