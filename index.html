@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pedidos y Cuentas · Demo</title><meta name="robots" content="noindex,nofollow">
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
@@ -12,7 +14,7 @@
 html{scroll-behavior:smooth}
 body{margin:0;font:14.5px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;background:var(--bg);color:var(--tx);-webkit-font-smoothing:antialiased}
 header{background:linear-gradient(120deg,#a8252a 0%,#b82a2b 45%,#9c2024 100%);color:#fff;padding:14px 32px;position:relative;overflow:hidden;display:flex;align-items:center;gap:18px;flex-wrap:wrap;border-bottom:3px solid var(--gold)}
-.logo{height:70px;border-radius:12px;display:block;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.logo{height:70px;width:70px;border-radius:16px;display:block;box-shadow:0 0 0 2px rgba(255,255,255,.9),0 2px 10px rgba(0,0,0,.25)}
 .hdfruit{position:absolute;right:-10px;top:-14px;opacity:.14;pointer-events:none}
 header h1{font:600 24px Georgia,"Times New Roman",serif;margin:0;letter-spacing:.2px}
 header .sub{opacity:.82;font-size:13px;margin-top:2px;display:block}
@@ -129,7 +131,7 @@ a.btn{text-decoration:none;display:inline-block}
 .pipe>div b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mu);margin-bottom:2px}
 .pipe .okp{background:var(--ok);border-color:#bfdcc8}.pipe .wnp{background:var(--warn);border-color:#ecd9a0}
 @media(max-width:899px){
-  header{padding:10px 14px;gap:12px}.logo{height:46px;border-radius:9px}header h1{font-size:19px}header .sub{font-size:12px}.hdfruit{display:none}
+  header{padding:10px 14px;gap:12px}.logo{height:46px;width:46px;border-radius:11px}header h1{font-size:19px}header .sub{font-size:12px}.hdfruit{display:none}
   #userbar{padding:4px 12px!important}.hero{gap:8px}.hero .kpi{flex:1 1 auto;min-width:92px;padding:9px 12px}.kpi b{font-size:21px}.kpi span{font-size:11px}
 }
 @media(max-width:599px),(max-width:899px) and (pointer:coarse){

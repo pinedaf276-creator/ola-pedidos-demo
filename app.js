@@ -1713,7 +1713,7 @@
     var lg = $('#login'); if (lg) lg.remove();
     lg = document.createElement('div'); lg.id = 'login';
     lg.style.cssText = 'position:fixed;inset:0;z-index:50;background:#f4f6f3;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto';
-    lg.innerHTML = '<div class="card lock" style="margin:0;width:100%;max-width:380px"><img src="logo.png" alt="OLA SAS" style="height:54px;margin-bottom:6px"><h2 style="margin:6px 0">Pedidos y Cuentas</h2><p class="muted" style="margin:0 0 6px">Escribe tu nombre y tu PIN para entrar.</p><input id="lgN" placeholder="Nombre" autocomplete="username" style="font-size:16px"><input type="password" id="lgP" placeholder="PIN o clave" autocomplete="current-password" inputmode="text"><div id="lgE" class="muted" style="color:var(--badtx);min-height:18px"></div><button class="btn" id="lgGo" style="width:100%">Entrar</button></div>';
+    lg.innerHTML = '<div class="card lock" style="margin:0;width:100%;max-width:380px"><img src="logo.png" alt="OLA SAS" style="height:84px;width:84px;margin-bottom:6px"><h2 style="margin:6px 0">Pedidos y Cuentas</h2><p class="muted" style="margin:0 0 6px">Escribe tu nombre y tu PIN para entrar.</p><input id="lgN" placeholder="Nombre" autocomplete="username" style="font-size:16px"><input type="password" id="lgP" placeholder="PIN o clave" autocomplete="current-password" inputmode="text"><div id="lgE" class="muted" style="color:var(--badtx);min-height:18px"></div><button class="btn" id="lgGo" style="width:100%">Entrar</button></div>';
     document.body.appendChild(lg);
     var go = async function () {
       var n = $('#lgN').value.trim(), p = $('#lgP').value; if (!n || !p) { $('#lgE').textContent = 'Escribe tu nombre y tu PIN'; return; }
