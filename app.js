@@ -50,7 +50,7 @@
     });
     return { orders: out, removed: n };
   }
-  function normHist(h) { h = h ? JSON.parse(JSON.stringify(h)) : {}; if (JSON.stringify(h).indexOf('Satélite R7') >= 0) h = JSON.parse(JSON.stringify(h).replace(/Satélite R7(?! \(Bogotá\))/g, 'Satélite R7 (Bogotá)')); var d = dedupOrders(h.orders || {}); return { orders: d.orders, seen: h.seen || {}, boxes: h.boxes || {}, status: h.status || {}, picked: h.picked || {}, disp: h.disp || {}, costs: h.costs || {}, users: h.users || {}, ver: h.ver || 0, dedup: d.removed }; }
+  function normHist(h) { h = h ? JSON.parse(JSON.stringify(h)) : {}; if (JSON.stringify(h).indexOf('Satélite R7') >= 0) h = JSON.parse(JSON.stringify(h).replace(/Satélite R7(?! \(Bogotá\))/g, 'Satélite R7 (Bogotá)')); var d = dedupOrders(h.orders || {}); return { orders: d.orders, seen: h.seen || {}, boxes: h.boxes || {}, status: h.status || {}, picked: h.picked || {}, disp: h.disp || {}, costs: h.costs || {}, pesos: h.pesos || {}, caps: h.caps || {}, users: h.users || {}, ver: h.ver || 0, dedup: d.removed }; }
   function findOrderKey(f) { var g = (f.chain || '') + '|' + (f.oc || f.name || ''), ks = Object.keys(S.hist.orders); for (var i = 0; i < ks.length; i++) if (ordGroup(S.hist.orders[ks[i]]) === g) return ks[i]; return null; }
   var hTimer = null, hSaving = Promise.resolve();
   function saveHist() {
@@ -105,8 +105,9 @@
       var cons = L.consolidate([{ city: o.city, lines: o.lines }], S.cat);
       cons.rows.forEach(function (r) {
         var ch = o.chain || (o.lines[0] && o.lines[0].sku ? 'Ara' : ''), pr = L.presentation(r.name, r.unit, ch);
-        var bx = O.lookup(r.ara || r.name, S.hist.boxes), cxv = r.cx, embv = r.emb || 0, est = false;
-        out.push({ frozen: /SOLEI|CONGELAD/.test(L.norm(r.name)), kgq: (ch === 'Éxito' || pr.kgQty || /SOLEI|CONGELAD/.test(L.norm(r.name))) ? 'ex' : pr.g ? 'es' : 'no', ref: bx ? bx.ref : '', cap: bx ? O.capOf(bx.ref) : 0, est: false, known: !!bx, chain: ch, pres: pr.pres, word: pr.word, emb: embv, kg: (ch === 'Éxito' || pr.kgQty) ? r.qty : (pr.g ? Math.round(r.qty * pr.g) / 1000 : 0), date: o.date, recv: o.poDate || '', ara: r.ara || '', oc: o.oc, city: o.city, prov: L.provOf(r, S.cat) || '', sku: /^N:/.test(r.key) ? '' : r.key, name: r.name, unit: r.unit, cx: cxv, qty: r.qty, price: r.qty ? Math.round(r.val / r.qty) : 0, val: r.val || 0 });
+        var bx = O.lookup(r.ara || r.name, S.hist.boxes), cxv = r.cx, embv = r.emb || 0, est = false, pw = (S.hist.pesos || {})[L.norm(r.name)], ov = (S.hist.caps || {})[L.norm(r.ara || r.name)], kg0 = (ch === 'Éxito' || pr.kgQty) ? r.qty : (pr.g ? Math.round(r.qty * pr.g) / 1000 : 0), isFz = /SOLEI|CONGELAD/.test(L.norm(r.name));
+        if (!kg0 && !isFz && pw > 0) kg0 = Math.round(r.qty * pw * 1000) / 1000;
+        out.push({ frozen: /SOLEI|CONGELAD/.test(L.norm(r.name)), kgq: (ch === 'Éxito' || pr.kgQty || isFz) ? 'ex' : (pr.g || (pw > 0)) ? 'es' : 'no', ref: bx ? bx.ref : (ov ? ov.ref : ''), cap: ov && ov.cap ? ov.cap : (bx ? O.capOf(bx.ref) : 0), est: false, known: !!bx, chain: ch, pres: pr.pres, word: pr.word, emb: embv, kg: kg0, date: o.date, recv: o.poDate || '', ara: r.ara || '', oc: o.oc, city: o.city, prov: L.provOf(r, S.cat) || '', sku: /^N:/.test(r.key) ? '' : r.key, name: r.name, unit: r.unit, cx: cxv, qty: r.qty, price: r.qty ? Math.round(r.val / r.qty) : 0, val: r.val || 0 });
       });
     });
     return out;
@@ -298,7 +299,7 @@
           if (!confirm('Respaldo del ' + fe + ': ' + Object.keys(inc.orders).length + ' órdenes' + (nr ? ', ' + nr + ' recibos' : '') + '.\nSe juntará con las ' + n0 + ' órdenes actuales. Lo que ya tienes no se borra ni se cambia; solo se agrega lo que falte. ¿Seguir?')) { inp.value = ''; return; }
           var add = 0;
           Object.keys(inc.orders).forEach(function (k) { if (!S.hist.orders[k]) { S.hist.orders[k] = inc.orders[k]; add++; } });
-          ['seen', 'boxes', 'costs', 'status', 'picked', 'disp', 'users'].forEach(function (c) { S.hist[c] = S.hist[c] || {}; Object.keys(inc[c] || {}).forEach(function (k) { if (S.hist[c][k] == null) S.hist[c][k] = inc[c][k]; }); });
+          ['seen', 'boxes', 'costs', 'status', 'picked', 'disp', 'users', 'pesos', 'caps'].forEach(function (c) { S.hist[c] = S.hist[c] || {}; Object.keys(inc[c] || {}).forEach(function (k) { if (S.hist[c][k] == null) S.hist[c][k] = inc[c][k]; }); });
           if (j.cat) { var ic = normCat(j.cat); ['map', 'alias', 'provs'].forEach(function (c) { Object.keys(ic[c]).forEach(function (k) { if (S.cat[c][k] == null) S.cat[c][k] = ic[c][k]; }); }); saveCat(); }
           Object.keys(j.rec || {}).forEach(function (k) { if (!S.rec[k]) { S.rec[k] = j.rec[k]; if (S.recCol) S.recCol.doc(k).set(JSON.parse(JSON.stringify(j.rec[k]))).catch(function () {}); } });
           try { localStorage.setItem('rec_v1', JSON.stringify(S.rec)); } catch (e) {}
@@ -1158,6 +1159,29 @@
   function revBanner(bad, id) {
     return '<div' + (id ? ' id="' + id + '"' : '') + ' class="banner" style="background:#fff3cd;border-color:#e0a800">⚠️ <b>' + bad.length + ' orden(es) por revisar</b> (total distinto al del PDF, líneas sin leer o fecha de entrega anterior al pedido): ' + '<ul style="margin:6px 0 0;padding-left:18px">' + bad.map(function (o) { return '<li>' + esc(o.chain + ' ' + o.oc + ' ' + o.city + (o.poDate && o.date && dkey(o.date) < dkey(o.poDate) ? ' (entrega ' + o.date + ')' : '')) + ' — ' + ordLinks(o) + '</li>'; }).join('') + '</ul></div>';
   }
+  // productos de Ara a los que les falta el peso por unidad o la medida de estiba; {clave: {name, ara, qty, cx, ords:{}}}
+  function tkMiss(ar, kind) {
+    var o = {};
+    ar.forEach(function (d) {
+      var miss = kind === 'peso' ? (!d.kg && !d.frozen) : !(O.capByName(d.ara || d.name) || d.cap || d.ref);
+      if (!miss) return;
+      var k = kind === 'peso' ? L.norm(d.name) : L.norm(d.ara || d.name), x = o[k] = o[k] || { name: d.name, ara: d.ara || '', sku: d.sku || '', qty: 0, cx: 0, ords: {}, word: d.word };
+      x.qty += d.qty || 0; x.cx += d.cx || 0; x.ords[d.oc] = 1;
+    });
+    return o;
+  }
+  function tkPanel(kind, miss) {
+    var ks = Object.keys(miss), peso = kind === 'peso';
+    return '<div id="tkBox" class="banner" style="background:#fff6dd;border-color:#e0a800">⚠️ <b>' + ks.length + ' producto(s) ' + (peso ? 'sin peso' : 'sin medida de estiba') + '</b><p style="margin:4px 0 8px;font-size:13px">' +
+      (peso ? 'El pedido llega en unidades y el nombre no dice cuánto pesa cada una, por eso el peso total queda corto. Escribe lo que pesa <b>una unidad en kg</b> (por ejemplo 0,25) y se corrige en todos los pedidos.' : 'Sin esta medida el cubicaje usa una general (80 cajas por estiba). Indica <b>cuántas cajas entran en una estiba</b> y de qué tipo es la caja.') + '</p>' +
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#6b5400"><th style="padding:4px 6px">Producto</th><th style="padding:4px 6px">Pedido</th><th style="padding:4px 6px">' + (peso ? 'Kg por unidad' : 'Cajas por estiba · tipo') + '</th><th></th></tr></thead><tbody>' +
+      ks.map(function (k) {
+        var x = miss[k];
+        return '<tr style="border-top:1px solid #efd58a"><td style="padding:6px"><b>' + esc(x.name) + '</b>' + (x.sku ? '<br><span class="muted" style="font-size:11px">' + esc(x.sku) + '</span>' : '') + '</td><td style="padding:6px;white-space:nowrap">' + (peso ? fmt(x.qty) + ' ' + esc(x.word || 'und') : fmt(x.cx) + ' CX') + ' · ' + Object.keys(x.ords).length + ' orden(es)</td><td style="padding:6px;white-space:nowrap">' +
+          (peso ? '<input class="tk-w" inputmode="decimal" placeholder="0,25" style="width:84px;font-size:16px;padding:6px">' : '<input class="tk-c" inputmode="numeric" placeholder="30" style="width:70px;font-size:16px;padding:6px"> <select class="tk-r" style="font-size:16px;padding:6px"><option value="MEDIANA">Mediana</option><option value="MINI">Mini</option><option value="BULTO">Bulto</option><option value="COSTAL">Costal</option></select>') +
+          '</td><td style="padding:6px"><button class="btn sm" data-save="' + esc(k) + '" data-kind="' + kind + '">Guardar</button></td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }
   // cinta discreta arriba de Hoy: datos del día que se mueven y se actualizan solos (sin precios)
   function dayTicker(all) {
     var rows = all.filter(function (d) { return S.hoyDate === '*' || hdate(d) === S.hoyDate; });
@@ -1175,15 +1199,13 @@
     var ar = rows.filter(function (d) { return d.chain === 'Ara'; }), cu = ar.length ? O.cubic(ar).tot : null;
     if (cu && cu.cx) it.push('<span class="tki">🚚 Ara: <b>' + n1(cu.cx) + '</b> cajas · <b>' + n1(cu.est1, 1) + '</b> estibas · ' + wk(cu.total) + '</span>');
     if (!bodR) {
-      var bad = revList(), sp = {}, se = {};
-      ar.forEach(function (d) { if (!d.kg && !d.frozen) sp[L.norm(d.name)] = 1; if (!(O.capByName(d.ara || d.name) || d.cap || d.ref)) se[L.norm(d.name)] = 1; });
-      var nsp = Object.keys(sp).length, nse = Object.keys(se).length;
-      if (bad.length) pin.push('<a class="tki warn" href="#" data-rev="1">⚠️ <b>' + bad.length + '</b> <span class="tkt">orden(es) por revisar · ver correos</span><span class="tkm">por revisar</span> ' + (S.revOpen ? '▴' : '▾') + '</a>');
-      if (nsp) pin.push('<span class="tki warn tkd">⚠️ <b>' + nsp + '</b> producto(s) sin peso</span>');
-      if (nse) pin.push('<span class="tki warn tkd">⚠️ <b>' + nse + '</b> sin medida de estiba</span>');
+      var bad = revList(), sp = tkMiss(ar, 'peso'), se = tkMiss(ar, 'est'), nsp = Object.keys(sp).length, nse = Object.keys(se).length;
+      if (bad.length) pin.push('<a class="tki warn" href="#" data-tk="rev">⚠️ <b>' + bad.length + '</b> <span class="tkt">orden(es) por revisar · ver correos</span><span class="tkm">por revisar</span> ' + (S.tkOpen === 'rev' ? '▴' : '▾') + '</a>');
+      if (nsp) pin.push('<a class="tki warn tkd" href="#" data-tk="peso">⚠️ <b>' + nsp + '</b> sin peso ' + (S.tkOpen === 'peso' ? '▴' : '▾') + '</a>');
+      if (nse) pin.push('<a class="tki warn tkd" href="#" data-tk="est">⚠️ <b>' + nse + '</b> sin estiba ' + (S.tkOpen === 'est' ? '▴' : '▾') + '</a>');
       if (!bad.length && !nsp && !nse) pin.push('<span class="tki ok">✔ todo en orden</span>');
     }
-    return '<div id="tick" class="tick"><div class="tkv"><div class="tkw"><div class="tk">' + it.join('') + '</div></div></div>' + (pin.length ? '<div class="tkp">' + pin.join('') + '</div>' : '') + '</div>' + (S.revOpen && !bodR && revList().length ? revBanner(revList(), 'revBox') : '');
+    return '<div id="tick" class="tick"><div class="tkv"><div class="tkw"><div class="tk">' + it.join('') + '</div></div></div>' + (pin.length ? '<div class="tkp">' + pin.join('') + '</div>' : '') + '</div>' + (bodR ? '' : S.tkOpen === 'rev' && revList().length ? revBanner(revList(), 'revBox') : S.tkOpen === 'peso' && Object.keys(tkMiss(ar, 'peso')).length ? tkPanel('peso', tkMiss(ar, 'peso')) : S.tkOpen === 'est' && Object.keys(tkMiss(ar, 'est')).length ? tkPanel('est', tkMiss(ar, 'est')) : '');
   }
   function renderHoy() {
     var el = $('#p-hoy'), all = histDetail();
@@ -1245,8 +1267,16 @@
     var tk = $('#tick'); if (tk) {
       var tv = tk.querySelector('.tkv'), tw = tk.querySelector('.tkw'), t1 = tk.querySelector('.tk');
       if (t1.scrollWidth > tv.clientWidth + 2) { tk.classList.add('run'); var cl2 = t1.cloneNode(true); cl2.setAttribute('aria-hidden', 'true'); tw.appendChild(cl2); }
-      tk.onclick = function (ev) { var r = ev.target.closest && ev.target.closest('[data-rev]'); if (!r) return; ev.preventDefault(); S.revOpen = !S.revOpen; renderHoy(); };
+      tk.onclick = function (ev) { var r = ev.target.closest && ev.target.closest('[data-tk]'); if (!r) return; ev.preventDefault(); S.tkOpen = S.tkOpen === r.dataset.tk ? '' : r.dataset.tk; renderHoy(); };
     }
+    var tpn = $('#tkBox'); if (tpn) tpn.querySelectorAll('[data-save]').forEach(function (b) {
+      b.onclick = function () {
+        var k = b.dataset.save, kind = b.dataset.kind, row = b.closest('tr'), num = function (sel) { var v = row.querySelector(sel); return v ? parseFloat(String(v.value).replace(',', '.')) : NaN; };
+        if (kind === 'peso') { var w = num('.tk-w'); if (!(w > 0 && w < 100)) { toast('Escribe el peso de una unidad en kg, por ejemplo 0,25'); return; } S.hist.pesos = S.hist.pesos || {}; S.hist.pesos[k] = w; }
+        else { var c = num('.tk-c'), rf = row.querySelector('.tk-r').value; if (!(c > 0 && c < 1000)) { toast('Escribe cuántas cajas entran en una estiba, por ejemplo 30'); return; } S.hist.caps = S.hist.caps || {}; S.hist.caps[k] = { cap: Math.round(c), ref: rf }; }
+        saveHist(); toast('Guardado'); renderHoy();
+      };
+    });
     var wc = $('#waQc'); if (wc) wc.onclick = function () { var ta = $('#waQ'); ta.select(); var ok = false; try { ok = document.execCommand('copy'); } catch (x) {} if (!ok && navigator.clipboard) navigator.clipboard.writeText(ta.value).then(function () { toast('Mensaje copiado'); }, function () {}); else toast(ok ? 'Mensaje copiado' : 'Selecciona el texto y cópialo'); };
     var sn = $('#syncNow'); if (sn) sn.onclick = function () { driveSync(true); };
     $('#hq').oninput = function () { var p = this.selectionStart; S.hq = this.value; renderHoy(); var n = $('#hq'); n.focus(); try { n.setSelectionRange(p, p); } catch (x) {} };
