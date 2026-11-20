@@ -1157,16 +1157,39 @@
   function daySum(all) {
     var rows = all.filter(function (d) { return S.hoyDate === '*' || hdate(d) === S.hoyDate; });
     if (!rows.length) return '';
-    var ord = {}, oc = { Ara: {}, 'Éxito': {} }, prod = {}, city = {}, kg = 0, es = 0;
-    rows.forEach(function (d) { ord[d.chain + '|' + d.oc] = 1; (oc[d.chain] = oc[d.chain] || {})[d.oc] = 1; prod[d.chain + '|' + L.norm(d.name)] = 1; city[d.city] = (city[d.city] || 0) + (d.kg || 0); kg += d.kg || 0; if (d.kgq === 'es') es += d.kg || 0; });
+    var ord = {}, oc = { Ara: {}, 'Éxito': {} }, prod = {}, city = {}, byC = {}, kg = 0, es = 0, isAdm = !!(S.user && S.user.role === 'admin'), bodR = S.user && S.user.role === 'bodega';
+    rows.forEach(function (d) { ord[d.chain + '|' + d.oc] = 1; (oc[d.chain] = oc[d.chain] || {})[d.oc] = 1; prod[d.chain + '|' + L.norm(d.name)] = 1; city[d.city] = (city[d.city] || 0) + (d.kg || 0); (byC[d.city] = byC[d.city] || []).push(d); kg += d.kg || 0; if (d.kgq === 'es') es += d.kg || 0; });
     var cl = Object.keys(city).sort(function (a, b) { return city[b] - city[a]; }), max = Math.max.apply(null, cl.map(function (c) { return city[c]; }).concat([1])), nA = Object.keys(oc.Ara).length, nE = Object.keys(oc['Éxito']).length;
     var tile = function (b, l, sub) { return '<div class="dtile"><b>' + b + '</b><span>' + l + '</span>' + (sub ? '<i>' + sub + '</i>' : '') + '</div>'; };
-    return '<div class="dsum"><div class="dsh">Resumen · ' + esc(dayTxt()) + '</div><div class="dtiles">' +
-      tile(Object.keys(ord).length, 'órdenes', (nA ? '🔴 ' + nA : '') + (nA && nE ? '  ' : '') + (nE ? '🟡 ' + nE : '')) + tile(cl.length, 'destinos', '') + tile(Object.keys(prod).length, 'productos', '') + tile((es ? '≈ ' : '') + wk(kg), 'de peso', '') + '</div>' +
-      '<div class="dsh" style="margin-top:12px">Peso por destino</div>' + cl.slice(0, 7).map(function (c) {
-        var col = CITY_COL[L.norm(c).replace(/ /g, '')] || '#BFBFBF';
-        return '<div class="dbar"><span title="' + esc(c) + '">' + esc(c) + '</span><u><i style="width:' + Math.max(city[c] ? 3 : 0, city[c] / max * 100).toFixed(1) + '%;background:' + col + '"></i></u><b>' + wk(city[c]) + '</b></div>';
-      }).join('') + '</div>';
+    // alistado: lo ya sacado de la bodega
+    var pn = 0, pt = 0, pc = {};
+    cl.forEach(function (c) { var p = pickInfo(c, byC[c]); pc[c] = p; pn += p.n; pt += p.t; });
+    var pp = pt ? Math.round(pn / pt * 100) : 0;
+    var h = '<div class="dsum"><div class="dsh">Resumen · ' + esc(dayTxt()) + '</div><div class="dtiles">' +
+      tile(Object.keys(ord).length, 'órdenes', (nA ? '🔴 ' + nA : '') + (nA && nE ? '  ' : '') + (nE ? '🟡 ' + nE : '')) + tile(cl.length, 'destinos', '') + tile(Object.keys(prod).length, 'productos', '') + tile((es ? '≈ ' : '') + wk(kg), 'de peso', '') + '</div>';
+    h += '<div class="dsh" style="margin-top:14px">Alistado del día</div><div class="dprog"><u><i style="width:' + pp + '%;background:' + (pp === 100 ? '#2e8b57' : '#A93632') + '"></i></u><b>' + pp + '%</b><span>' + fmt(pn) + ' de ' + fmt(pt) + ' productos sacados</span></div>';
+    h += '<div class="dsh" style="margin-top:14px">Por destino · peso y alistado</div>' + cl.slice(0, 8).map(function (c) {
+      var col = CITY_COL[L.norm(c).replace(/ /g, '')] || '#BFBFBF', p = pc[c], done = p.t && p.n === p.t;
+      return '<div class="dbar"><span title="' + esc(c) + '">' + esc(c) + '</span><u><i style="width:' + Math.max(city[c] ? 3 : 0, city[c] / max * 100).toFixed(1) + '%;background:' + col + '"></i></u><b>' + wk(city[c]) + '</b><em class="' + (done ? 'ok' : '') + '">' + (done ? '✔ ' : '') + p.n + '/' + p.t + '</em></div>';
+    }).join('');
+    // carga del día (solo Ara: tiene cubicaje)
+    var ar = rows.filter(function (d) { return d.chain === 'Ara'; });
+    if (ar.length) {
+      var cu = O.cubic(ar).tot;
+      if (cu && cu.cx) h += '<div class="dsh" style="margin-top:14px">Carga del día · Ara</div><div class="dtiles">' + tile(n1(cu.cx), 'cajas', '') + tile(n1(cu.est1, 1), 'estibas', 'hasta ' + n1(cu.est2) + ' si van separadas') + tile(wk(cu.total), 'con empaque', '') + tile(n1(cu.cub, 1), 'cubicaje', '') + '</div>';
+    }
+    // atención: lo que hay que revisar
+    var al = [], badO = histOrders().filter(function (o) { return o.unread > 0 || o.totalOk === false || (o.poDate && o.date && dkey(o.date) < dkey(o.poDate)); });
+    if (badO.length && !bodR) al.push('<b>' + badO.length + '</b> orden(es) con total distinto al PDF, líneas sin leer o fecha dudosa. Están al final de esta página.');
+    var sinPeso = {}, sinEst = {};
+    ar.forEach(function (d) { if (!d.kg && !d.frozen) sinPeso[L.norm(d.name)] = d.name; if (!(O.capByName(d.ara || d.name) || d.cap || d.ref)) sinEst[L.norm(d.name)] = d.name; });
+    var nsp = Object.keys(sinPeso), nse = Object.keys(sinEst);
+    if (nsp.length && !bodR) al.push('<b>' + nsp.length + '</b> producto(s) sin peso conocido: ' + esc(nsp.slice(0, 3).map(function (k) { return sinPeso[k]; }).join(', ')) + (nsp.length > 3 ? '…' : '') + '. El peso total queda corto.');
+    if (nse.length && !bodR) al.push('<b>' + nse.length + '</b> producto(s) sin medida de estiba: ' + esc(nse.slice(0, 3).map(function (k) { return sinEst[k]; }).join(', ')) + (nse.length > 3 ? '…' : '') + '. El cubicaje usa una medida general.');
+    if (!bodR) h += '<div class="dsh" style="margin-top:14px">Atención</div>' + (al.length ? '<div class="dwarn">' + al.map(function (x) { return '<div>⚠️ ' + x + '</div>'; }).join('') + '</div>' : '<div class="dok">✔ Todo en orden: sin órdenes por revisar ni productos sin medida.</div>');
+    // borrador: pedido → despachado → recibido → devuelto (se activa cuando carguemos despachos y comprobantes)
+    if (isAdm) h += '<div class="dsh" style="margin-top:14px">Cumplimiento · borrador</div><div class="dfun"><div class="on"><b>' + wk(kg) + '</b><span>Pedido</span></div><div><b>—</b><span>Despachado</span></div><div><b>—</b><span>Recibido</span></div><div><b>—</b><span>Devuelto</span></div></div><p class="muted" style="margin:4px 0 0;font-size:11.5px">Se activa cuando carguemos los despachos y los comprobantes de Ara.</p>';
+    return h + '</div>';
   }
   function renderHoy() {
     var el = $('#p-hoy'), all = histDetail();
