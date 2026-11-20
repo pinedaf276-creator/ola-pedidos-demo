@@ -50,7 +50,7 @@
     });
     return { orders: out, removed: n };
   }
-  function normHist(h) { h = h ? JSON.parse(JSON.stringify(h)) : {}; if (JSON.stringify(h).indexOf('Satélite R7') >= 0) h = JSON.parse(JSON.stringify(h).replace(/Satélite R7(?! \(Bogotá\))/g, 'Satélite R7 (Bogotá)')); var d = dedupOrders(h.orders || {}); return { orders: d.orders, seen: h.seen || {}, boxes: h.boxes || {}, status: h.status || {}, picked: h.picked || {}, disp: h.disp || {}, costs: h.costs || {}, pesos: h.pesos || {}, caps: h.caps || {}, users: h.users || {}, ver: h.ver || 0, dedup: d.removed }; }
+  function normHist(h) { h = h ? JSON.parse(JSON.stringify(h)) : {}; if (JSON.stringify(h).indexOf('Satélite R7') >= 0) h = JSON.parse(JSON.stringify(h).replace(/Satélite R7(?! \(Bogotá\))/g, 'Satélite R7 (Bogotá)')); var d = dedupOrders(h.orders || {}); return { orders: d.orders, seen: h.seen || {}, boxes: h.boxes || {}, status: h.status || {}, picked: h.picked || {}, disp: h.disp || {}, costs: h.costs || {}, pesos: h.pesos || {}, caps: h.caps || {}, unidad: h.unidad || {}, users: h.users || {}, ver: h.ver || 0, dedup: d.removed }; }
   function findOrderKey(f) { var g = (f.chain || '') + '|' + (f.oc || f.name || ''), ks = Object.keys(S.hist.orders); for (var i = 0; i < ks.length; i++) if (ordGroup(S.hist.orders[ks[i]]) === g) return ks[i]; return null; }
   var hTimer = null, hSaving = Promise.resolve();
   function saveHist() {
@@ -99,6 +99,12 @@
   function dm(d) { var m = /^(\d{2})\.(\d{2})/.exec(d || ''); return m ? m[1] + '/' + m[2] : '—'; }
   function dkey(d) { var m = /(\d{2})\.(\d{2})\.(\d{4})/.exec(d || ''); return m ? +(m[3] + m[2] + m[1]) : 0; }
   // filas de detalle (una por producto y orden) con proveedor según el catálogo actual
+  // productos que se piden y se envían por unidad (el peso no importa): marcados a mano, por nombre conocido o por "X 5 UNI"
+  var UNIT_DEF = [/^CIRUELA BOLSA/, /^MANDARINA MALLA/, /^ZANAHORIA Y REMOLACHA/];
+  function unitOnly(name) {
+    var n = L.norm(name);
+    return !!((S.hist.unidad || {})[n]) || UNIT_DEF.some(function (r) { return r.test(n); }) || /\bX ?\d+ ?(UNI|UND|UNID|UNIDADES)\b/.test(n);
+  }
   function histDetail() {
     var out = [];
     histOrders().forEach(function (o) {
@@ -107,7 +113,7 @@
         var ch = o.chain || (o.lines[0] && o.lines[0].sku ? 'Ara' : ''), pr = L.presentation(r.name, r.unit, ch);
         var bx = O.lookup(r.ara || r.name, S.hist.boxes), cxv = r.cx, embv = r.emb || 0, est = false, pw = (S.hist.pesos || {})[L.norm(r.name)], ov = (S.hist.caps || {})[L.norm(r.ara || r.name)], kg0 = (ch === 'Éxito' || pr.kgQty) ? r.qty : (pr.g ? Math.round(r.qty * pr.g) / 1000 : 0), isFz = /SOLEI|CONGELAD/.test(L.norm(r.name));
         if (!kg0 && !isFz && pw > 0) kg0 = Math.round(r.qty * pw * 1000) / 1000;
-        out.push({ frozen: /SOLEI|CONGELAD/.test(L.norm(r.name)), kgq: (ch === 'Éxito' || pr.kgQty || isFz) ? 'ex' : (pr.g || (pw > 0)) ? 'es' : 'no', ref: bx ? bx.ref : (ov ? ov.ref : ''), cap: ov && ov.cap ? ov.cap : (bx ? O.capOf(bx.ref) : 0), est: false, known: !!bx, chain: ch, pres: pr.pres, word: pr.word, emb: embv, kg: kg0, date: o.date, recv: o.poDate || '', ara: r.ara || '', oc: o.oc, city: o.city, prov: L.provOf(r, S.cat) || '', sku: /^N:/.test(r.key) ? '' : r.key, name: r.name, unit: r.unit, cx: cxv, qty: r.qty, price: r.qty ? Math.round(r.val / r.qty) : 0, val: r.val || 0 });
+        out.push({ unit1: unitOnly(r.name), frozen: /SOLEI|CONGELAD/.test(L.norm(r.name)), kgq: (ch === 'Éxito' || pr.kgQty || isFz) ? 'ex' : (pr.g || (pw > 0)) ? 'es' : 'no', ref: bx ? bx.ref : (ov ? ov.ref : ''), cap: ov && ov.cap ? ov.cap : (bx ? O.capOf(bx.ref) : 0), est: false, known: !!bx, chain: ch, pres: pr.pres, word: pr.word, emb: embv, kg: kg0, date: o.date, recv: o.poDate || '', ara: r.ara || '', oc: o.oc, city: o.city, prov: L.provOf(r, S.cat) || '', sku: /^N:/.test(r.key) ? '' : r.key, name: r.name, unit: r.unit, cx: cxv, qty: r.qty, price: r.qty ? Math.round(r.val / r.qty) : 0, val: r.val || 0 });
       });
     });
     return out;
@@ -299,7 +305,7 @@
           if (!confirm('Respaldo del ' + fe + ': ' + Object.keys(inc.orders).length + ' órdenes' + (nr ? ', ' + nr + ' recibos' : '') + '.\nSe juntará con las ' + n0 + ' órdenes actuales. Lo que ya tienes no se borra ni se cambia; solo se agrega lo que falte. ¿Seguir?')) { inp.value = ''; return; }
           var add = 0;
           Object.keys(inc.orders).forEach(function (k) { if (!S.hist.orders[k]) { S.hist.orders[k] = inc.orders[k]; add++; } });
-          ['seen', 'boxes', 'costs', 'status', 'picked', 'disp', 'users', 'pesos', 'caps'].forEach(function (c) { S.hist[c] = S.hist[c] || {}; Object.keys(inc[c] || {}).forEach(function (k) { if (S.hist[c][k] == null) S.hist[c][k] = inc[c][k]; }); });
+          ['seen', 'boxes', 'costs', 'status', 'picked', 'disp', 'users', 'pesos', 'caps', 'unidad'].forEach(function (c) { S.hist[c] = S.hist[c] || {}; Object.keys(inc[c] || {}).forEach(function (k) { if (S.hist[c][k] == null) S.hist[c][k] = inc[c][k]; }); });
           if (j.cat) { var ic = normCat(j.cat); ['map', 'alias', 'provs'].forEach(function (c) { Object.keys(ic[c]).forEach(function (k) { if (S.cat[c][k] == null) S.cat[c][k] = ic[c][k]; }); }); saveCat(); }
           Object.keys(j.rec || {}).forEach(function (k) { if (!S.rec[k]) { S.rec[k] = j.rec[k]; if (S.recCol) S.recCol.doc(k).set(JSON.parse(JSON.stringify(j.rec[k]))).catch(function () {}); } });
           try { localStorage.setItem('rec_v1', JSON.stringify(S.rec)); } catch (e) {}
@@ -1163,7 +1169,7 @@
   function tkMiss(ar, kind) {
     var o = {};
     ar.forEach(function (d) {
-      var miss = kind === 'peso' ? (!d.kg && !d.frozen) : !(O.capByName(d.ara || d.name) || d.cap || d.ref);
+      var miss = kind === 'peso' ? (!d.kg && !d.frozen && !d.unit1) : !(O.capByName(d.ara || d.name) || d.cap || d.ref);
       if (!miss) return;
       var k = kind === 'peso' ? L.norm(d.name) : L.norm(d.ara || d.name), x = o[k] = o[k] || { name: d.name, ara: d.ara || '', sku: d.sku || '', qty: 0, cx: 0, ords: {}, word: d.word };
       x.qty += d.qty || 0; x.cx += d.cx || 0; x.ords[d.oc] = 1;
@@ -1173,13 +1179,13 @@
   function tkPanel(kind, miss) {
     var ks = Object.keys(miss), peso = kind === 'peso';
     return '<div id="tkBox" class="banner" style="background:#fff6dd;border-color:#e0a800">⚠️ <b>' + ks.length + ' producto(s) ' + (peso ? 'sin peso' : 'sin medida de estiba') + '</b><p style="margin:4px 0 8px;font-size:13px">' +
-      (peso ? 'El pedido llega en unidades y el nombre no dice cuánto pesa cada una, por eso el peso total queda corto. Escribe lo que pesa <b>una unidad en kg</b> (por ejemplo 0,25) y se corrige en todos los pedidos.' : 'Sin esta medida el cubicaje usa una general (80 cajas por estiba). Indica <b>cuántas cajas entran en una estiba</b> y de qué tipo es la caja.') + '</p>' +
+      (peso ? 'El pedido llega en unidades y el nombre no dice cuánto pesa cada una, por eso el peso total queda corto. Escribe lo que pesa <b>una unidad en kg</b> (por ejemplo 0,25) y se corrige en todos los pedidos. Si el producto se pide y se envía <b>por unidad</b> y el peso no importa, toca «Por unidad».' : 'Sin esta medida el cubicaje usa una general (80 cajas por estiba). Indica <b>cuántas cajas entran en una estiba</b> y de qué tipo es la caja.') + '</p>' +
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#6b5400"><th style="padding:4px 6px">Producto</th><th style="padding:4px 6px">Pedido</th><th style="padding:4px 6px">' + (peso ? 'Kg por unidad' : 'Cajas por estiba · tipo') + '</th><th></th></tr></thead><tbody>' +
       ks.map(function (k) {
         var x = miss[k];
         return '<tr style="border-top:1px solid #efd58a"><td style="padding:6px"><b>' + esc(x.name) + '</b>' + (x.sku ? '<br><span class="muted" style="font-size:11px">' + esc(x.sku) + '</span>' : '') + '</td><td style="padding:6px;white-space:nowrap">' + (peso ? fmt(x.qty) + ' ' + esc(x.word || 'und') : fmt(x.cx) + ' CX') + ' · ' + Object.keys(x.ords).length + ' orden(es)</td><td style="padding:6px;white-space:nowrap">' +
           (peso ? '<input class="tk-w" inputmode="decimal" placeholder="0,25" style="width:84px;font-size:16px;padding:6px">' : '<input class="tk-c" inputmode="numeric" placeholder="30" style="width:70px;font-size:16px;padding:6px"> <select class="tk-r" style="font-size:16px;padding:6px"><option value="MEDIANA">Mediana</option><option value="MINI">Mini</option><option value="BULTO">Bulto</option><option value="COSTAL">Costal</option></select>') +
-          '</td><td style="padding:6px"><button class="btn sm" data-save="' + esc(k) + '" data-kind="' + kind + '">Guardar</button></td></tr>';
+          '</td><td style="padding:6px;white-space:nowrap"><button class="btn sm" data-save="' + esc(k) + '" data-kind="' + kind + '">Guardar</button>' + (peso ? ' <button class="btn sec sm" data-unit="' + esc(k) + '" title="Se pide y se envía por unidad: no necesita peso">Por unidad</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div></div>';
   }
   // cinta discreta arriba de Hoy: datos del día que se mueven y se actualizan solos (sin precios)
@@ -1277,6 +1283,7 @@
         saveHist(); toast('Guardado'); renderHoy();
       };
     });
+    if (tpn) tpn.querySelectorAll('[data-unit]').forEach(function (b) { b.onclick = function () { S.hist.unidad = S.hist.unidad || {}; S.hist.unidad[b.dataset.unit] = 1; saveHist(); toast('Listo: se maneja por unidad'); renderHoy(); }; });
     var wc = $('#waQc'); if (wc) wc.onclick = function () { var ta = $('#waQ'); ta.select(); var ok = false; try { ok = document.execCommand('copy'); } catch (x) {} if (!ok && navigator.clipboard) navigator.clipboard.writeText(ta.value).then(function () { toast('Mensaje copiado'); }, function () {}); else toast(ok ? 'Mensaje copiado' : 'Selecciona el texto y cópialo'); };
     var sn = $('#syncNow'); if (sn) sn.onclick = function () { driveSync(true); };
     $('#hq').oninput = function () { var p = this.selectionStart; S.hq = this.value; renderHoy(); var n = $('#hq'); n.focus(); try { n.setSelectionRange(p, p); } catch (x) {} };
