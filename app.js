@@ -260,6 +260,55 @@
     } else h += '<div class="stcard" style="border-left:5px solid #f2a900"><h3 style="margin:0 0 4px;color:#1F3864">📉 Margen y costos</h3><p class="muted" style="margin:0 0 8px">Todavía no hay costos cargados. Escribe lo que te cuesta cada producto (por unidad) y aquí aparecen el margen por producto y la ganancia.</p><button class="btn" data-lt="gan">Cargar costos</button></div>';
     return h;
   }
+
+  // ---- respaldo completo (pedidos, historial, alistado, costos, usuarios, catálogo y recibos)
+  function bkAgo() {
+    var t = ''; try { t = localStorage.getItem('bk_last') || ''; } catch (e) {}
+    if (!t) return { txt: 'Todavía no has descargado ningún respaldo en este navegador.', old: true };
+    var d = Math.floor((Date.now() - new Date(t).getTime()) / 864e5);
+    return { txt: 'Último respaldo descargado: ' + (d <= 0 ? 'hoy' : d === 1 ? 'ayer' : 'hace ' + d + ' días') + '.', old: d >= 7 };
+  }
+  function bkCard(p) {
+    p = p || '';
+    var a = bkAgo(), note = S.bkNote || ''; S.bkNote = '';
+    return '<div class="card" style="' + (a.old ? 'border-left:5px solid #f2a900' : '') + '"><h3 style="margin:0 0 6px">💾 Copia de seguridad</h3><p class="muted" style="margin:0 0 8px">Descarga una copia de todo: órdenes, alistado, costos, usuarios, catálogo y recibos. Guárdala en un lugar privado (trae datos de la empresa). Hazlo cada semana. «Restaurar» junta la copia con lo que hay y no borra nada.</p>' +
+      '<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="bkDl' + p + '">⬇ Descargar respaldo</button><button class="btn sec" id="bkUp' + p + '">⬆ Restaurar respaldo</button><input type="file" id="bkFile' + p + '" accept=".json,application/json" hidden></div>' +
+      '<div id="bkMsg' + p + '" class="muted" style="min-height:18px;margin-top:6px;' + (a.old ? 'color:#8a5a00;font-weight:600' : '') + '">' + (note || a.txt) + '</div></div>';
+  }
+  function bkBind(p, after) {
+    p = p || '';
+    var msg = function (t, bad) { var m = $('#bkMsg' + p); if (m) { m.textContent = t; m.style.color = bad ? '#c62828' : ''; m.style.fontWeight = bad ? '600' : ''; } };
+    $('#bkDl' + p).onclick = async function () {
+      try {
+        var d = new Date(), nm = 'Respaldo OLA ' + d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + '.json',
+          data = new TextEncoder().encode(JSON.stringify({ app: 'ola-pedidos', version: 2, fecha: d.toISOString(), hist: S.hist, cat: S.cat, rec: S.rec || {} }, null, 1));
+        if (S.dl) await S.dl.save({ filename: nm, data: data }); else { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' })); a.download = nm; a.click(); }
+        try { localStorage.setItem('bk_last', d.toISOString()); } catch (e) {}
+        msg('Respaldo descargado (' + nm + '): ' + Object.keys(S.hist.orders).length + ' órdenes, ' + Object.keys(S.hist.users || {}).length + ' usuarios, ' + Object.keys(S.rec || {}).length + ' recibos.');
+        if (after) after();
+      } catch (e) { if (!e || e.code !== 'declined') msg('No se pudo descargar el respaldo.', true); }
+    };
+    $('#bkUp' + p).onclick = function () { $('#bkFile' + p).click(); };
+    $('#bkFile' + p).onchange = function () {
+      var f = this.files[0]; if (!f) return; var r = new FileReader(), inp = this;
+      r.onload = function () {
+        try {
+          var j = JSON.parse(r.result); if (!j || j.app !== 'ola-pedidos' || !j.hist) throw new Error('x');
+          var inc = normHist(j.hist), n0 = Object.keys(S.hist.orders).length, nr = Object.keys(j.rec || {}).length, fe = j.fecha ? new Date(j.fecha).toLocaleDateString('es-CO') : 'sin fecha';
+          if (!confirm('Respaldo del ' + fe + ': ' + Object.keys(inc.orders).length + ' órdenes' + (nr ? ', ' + nr + ' recibos' : '') + '.\nSe juntará con las ' + n0 + ' órdenes actuales. Lo que ya tienes no se borra ni se cambia; solo se agrega lo que falte. ¿Seguir?')) { inp.value = ''; return; }
+          var add = 0;
+          Object.keys(inc.orders).forEach(function (k) { if (!S.hist.orders[k]) { S.hist.orders[k] = inc.orders[k]; add++; } });
+          ['seen', 'boxes', 'costs', 'status', 'picked', 'disp', 'users'].forEach(function (c) { S.hist[c] = S.hist[c] || {}; Object.keys(inc[c] || {}).forEach(function (k) { if (S.hist[c][k] == null) S.hist[c][k] = inc[c][k]; }); });
+          if (j.cat) { var ic = normCat(j.cat); ['map', 'alias', 'provs'].forEach(function (c) { Object.keys(ic[c]).forEach(function (k) { if (S.cat[c][k] == null) S.cat[c][k] = ic[c][k]; }); }); saveCat(); }
+          Object.keys(j.rec || {}).forEach(function (k) { if (!S.rec[k]) { S.rec[k] = j.rec[k]; if (S.recCol) S.recCol.doc(k).set(JSON.parse(JSON.stringify(j.rec[k]))).catch(function () {}); } });
+          try { localStorage.setItem('rec_v1', JSON.stringify(S.rec)); } catch (e) {}
+          S.hist.orders = dedupOrders(S.hist.orders).orders; saveHist(); inp.value = '';
+          S.bkNote = 'Listo: se agregaron ' + add + ' órdenes. Ahora hay ' + Object.keys(S.hist.orders).length + '.'; msg(S.bkNote);
+          if (after) after(true);
+        } catch (e) { msg('Ese archivo no es un respaldo válido.', true); }
+      }; r.readAsText(f);
+    };
+  }
   function ledgerPro(det) {
     var g = S.lg, MS = monthsOf(det), h = '', cs = S.hist.costs = S.hist.costs || {};
     var tabs = '<div style="overflow-x:auto;margin:6px 0">' + segBtns([['pre', '📊 Resumen visual'], ['ord', '🧾 Órdenes'], ['ven', '💰 Ventas por producto'], ['gan', '📈 Ganancia']], g.tab, 'data-lt') + '</div>';
@@ -314,7 +363,7 @@
   function renderLedger() {
     if (!S.unlocked) { renderLocked(); return; }
     var el = $('#p-ledger'), ords = histOrders(), det = histDetail(), h = '';
-    if (!ords.length) { el.innerHTML = '<div class="card"><h2>Precios y costos</h2><p class="muted">Aquí se van guardando solas todas las órdenes que leas (fecha, OC, ciudad, cajas y valor). Todavía no hay ninguna.</p></div>'; return; }
+    if (!ords.length) { el.innerHTML = '<div class="card"><h2>Precios y costos</h2><p class="muted">Aquí se van guardando solas todas las órdenes que leas (fecha, OC, ciudad, cajas y valor). Todavía no hay ninguna.</p></div>' + bkCard('L'); bkBind('L', function (re) { if (re) renderLedger(); }); return; }
     var tcx = 0, tval = 0; det.forEach(function (d) { tcx += d.cx; tval += d.qty * d.price; });
     stStyle(); var lp = ledgerPro(det), onlyOrd = S.lg.tab === 'ord';
     h += '<div class="hero"><div class="kpi"><b>' + ords.length + '</b><span>órdenes guardadas</span></div><div class="kpi"><b>' + fmt(tcx) + '</b><span>cajas en total</span></div><div class="kpi"><b>' + cop(tval) + '</b><span>valor neto sin IVA</span></div></div>';
@@ -327,8 +376,8 @@
       h += '<tr><td>' + esc(o.date) + '</td><td>' + esc(o.oc) + '</td><td>' + esc(o.city) + '</td><td class="n">' + o.lines.length + '</td><td class="n">' + fmt(cx) + '</td><td class="n">' + (val ? cop(val) : '–') + '</td><td>' + ok + '</td><td><button class="btn sec sm" data-hdel="' + esc(o.id) + '">Quitar</button></td></tr>';
     });
     h += '</tbody></table></div>';
-    el.innerHTML = heroH + lp.replace('</div>', ' <button class="btn sec sm" id="lockBtn2">🔒 Bloquear</button></div>') + (onlyOrd ? h : '');
-    ledgerBind(el); if ($('#lockBtn2')) $('#lockBtn2').onclick = function () { S.unlocked = false; renderLedger(); };
+    el.innerHTML = heroH + lp.replace('</div>', ' <button class="btn sec sm" id="lockBtn2">🔒 Bloquear</button></div>') + (onlyOrd ? h : '') + bkCard('L');
+    ledgerBind(el); bkBind('L', function (re) { if (re) renderLedger(); }); if ($('#lockBtn2')) $('#lockBtn2').onclick = function () { S.unlocked = false; renderLedger(); };
     if (!onlyOrd) return;
     $('#dlLed').onclick = dlLedger; $('#dlLedOla').onclick = function () { dlOla(histDetail(), true, 'Cuentas OLA con precios.xlsx'); };
     $('#lockBtn').onclick = function () { S.unlocked = false; renderLedger(); };
@@ -1733,31 +1782,9 @@
     var us = S.hist.users = S.hist.users || {}, ks = Object.keys(us).sort();
     el.innerHTML = '<div class="card"><h2>👥 Usuarios</h2><p class="muted">Cada persona entra con su nombre y su PIN. <b>Bodega</b> solo ve Hoy y Despacho, sin precios; <b>Secretaria</b> ve pedidos y exporta Excel sin precios; <b>Administrador</b> ve todo (Estadísticas, Cuentas y Ganancia). Tu clave de siempre sigue entrando como administrador.</p>' +
       '<div class="tablewrap"><table><thead><tr><th>Nombre</th><th>Rol</th><th></th></tr></thead><tbody>' + (ks.length ? ks.map(function (k) { var r = us[k]; return '<tr><td>' + esc(r.n) + '</td><td><select data-ur="' + esc(k) + '" style="font-size:15px;padding:5px">' + Object.keys(ROLES).map(function (x) { return '<option value="' + x + '"' + (r.r === x ? ' selected' : '') + '>' + ROLES[x] + '</option>'; }).join('') + '</select></td><td style="white-space:nowrap"><input type="password" placeholder="Nuevo PIN" data-upi="' + esc(k) + '" style="width:110px;font-size:15px;padding:5px"> <button class="btn sec sm" data-upp="' + esc(k) + '">Cambiar PIN</button> <button class="btn sec sm" data-udel="' + esc(k) + '">Quitar</button></td></tr>'; }).join('') : '<tr><td colspan="3" class="muted">Todavía no hay usuarios. Crea el primero abajo.</td></tr>') + '</tbody></table></div></div>' +
-      '<div class="card"><h3 style="margin:0 0 8px">💾 Respaldo</h3><p class="muted" style="margin:0 0 8px">Descarga una copia de todo (pedidos, historial, costos, usuarios). Hazlo seguido, por ejemplo cada semana. Con «Restaurar» se junta un respaldo con lo que hay, sin borrar nada.</p><div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="bkDl">⬇ Descargar respaldo</button><button class="btn sec" id="bkUp">⬆ Restaurar respaldo</button><input type="file" id="bkFile" accept=".json,application/json" hidden></div><div id="bkMsg" class="muted" style="min-height:18px;margin-top:6px"></div></div>' +
+      bkCard('U') +
       '<div class="card"><h3 style="margin:0 0 8px">Agregar usuario</h3><div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end"><label class="muted" style="font-size:11px">Nombre<br><input id="unN" style="font-size:16px;padding:7px"></label><label class="muted" style="font-size:11px">Rol<br><select id="unR" style="font-size:16px;padding:7px">' + Object.keys(ROLES).map(function (x) { return '<option value="' + x + '">' + ROLES[x] + '</option>'; }).join('') + '</select></label><label class="muted" style="font-size:11px">PIN (mínimo 4)<br><input id="unP" type="password" style="font-size:16px;padding:7px"></label><button class="btn" id="unAdd">Crear</button></div><div id="unE" class="muted" style="color:var(--badtx);min-height:18px;margin-top:6px"></div></div>';
-    $('#bkDl').onclick = async function () {
-      try {
-        var d = new Date(), nm = 'Respaldo OLA ' + d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + '.json', txt = JSON.stringify({ app: 'ola-pedidos', version: 1, fecha: d.toISOString(), hist: S.hist }, null, 1), data = new TextEncoder().encode(txt);
-        if (S.dl) await S.dl.save({ filename: nm, data: data }); else { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' })); a.download = nm; a.click(); }
-        $('#bkMsg').textContent = 'Respaldo descargado: ' + Object.keys(S.hist.orders).length + ' órdenes.';
-      } catch (e) { $('#bkMsg').textContent = 'No se pudo descargar el respaldo.'; }
-    };
-    $('#bkUp').onclick = function () { $('#bkFile').click(); };
-    $('#bkFile').onchange = function () {
-      var f = this.files[0]; if (!f) return; var r = new FileReader();
-      r.onload = function () {
-        try {
-          var j = JSON.parse(r.result); if (!j || j.app !== 'ola-pedidos' || !j.hist) throw new Error('x');
-          var inc = normHist(j.hist), n0 = Object.keys(S.hist.orders).length;
-          if (!confirm('Se juntarán ' + Object.keys(inc.orders).length + ' órdenes del respaldo con las ' + n0 + ' actuales. No se borra nada. ¿Seguir?')) return;
-          Object.keys(inc.orders).forEach(function (k) { if (!S.hist.orders[k]) S.hist.orders[k] = inc.orders[k]; });
-          ['seen', 'boxes', 'costs'].forEach(function (c) { S.hist[c] = S.hist[c] || {}; Object.keys(inc[c] || {}).forEach(function (k) { if (S.hist[c][k] == null) S.hist[c][k] = inc[c][k]; }); });
-          S.hist.users = S.hist.users || {}; Object.keys(inc.users || {}).forEach(function (k) { if (!S.hist.users[k]) S.hist.users[k] = inc.users[k]; });
-          S.hist.orders = dedupOrders(S.hist.orders).orders; saveHist(); renderUsers();
-          $('#bkMsg').textContent = 'Listo: ahora hay ' + Object.keys(S.hist.orders).length + ' órdenes.';
-        } catch (e) { $('#bkMsg').textContent = 'Ese archivo no es un respaldo válido.'; }
-      }; r.readAsText(f);
-    };
+    bkBind('U', function (re) { if (re) renderUsers(); });
     addEye($('#unP')); el.querySelectorAll('[data-upi]').forEach(addEye);
     $('#unAdd').onclick = async function () {
       var n = $('#unN').value.trim(), p = $('#unP').value, r = $('#unR').value;
